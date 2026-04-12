@@ -2,216 +2,530 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Sixty4 | Tactical Map</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>The Sixty4 | World Map</title>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser-arcade-physics.min.js"></script>
     <style>
-        body { margin: 0; padding: 0; overflow: hidden; background-color: #050a0f; }
-        canvas { display: block; cursor: grab; }
-        canvas:active { cursor: grabbing; }
+        body { 
+            margin: 0; 
+            padding: 0; 
+            overflow: hidden; 
+            background-color: #050a0f;
+            font-family: 'Courier New', monospace;
+        }
+        #ui-overlay {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.8);
+            color: #00ff00;
+            padding: 15px;
+            border: 2px solid #00ff00;
+            font-size: 12px;
+            z-index: 1000;
+            max-width: 300px;
+            border-radius: 5px;
+        }
+        #player-info {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.8);
+            color: #00ff00;
+            padding: 15px;
+            border: 2px solid #00ff00;
+            font-size: 12px;
+            z-index: 1000;
+            border-radius: 5px;
+        }
+        #sector-info {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.9);
+            color: #00ff00;
+            padding: 15px;
+            border: 2px solid #00ff00;
+            font-size: 11px;
+            z-index: 1000;
+            max-width: 350px;
+            border-radius: 5px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .loading { color: #ffaa00; }
+        .error { color: #ff4444; }
+        .success { color: #00ff00; }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 10px #00ff00; }
+            50% { box-shadow: 0 0 20px #00ff00, 0 0 40px #00ff00; }
+            100% { box-shadow: 0 0 10px #00ff00; }
+        }
+        .pulse-animation {
+            animation: pulse 2s infinite;
+        }
     </style>
 </head>
 <body>
+    <div id="ui-overlay">
+        <div><strong>🗺️ SECTOR MAP</strong></div>
+        <div id="zoom-level">Zoom: 5%</div>
+        <div id="coordinates">Pos: (4000, 4000)</div>
+        <div id="connection-status" class="loading">⚡ Connecting...</div>
+    </div>
+    
+    <div id="player-info">
+        <div id="player-name">Loading...</div>
+        <div id="player-sector">Sector: --</div>
+        <div id="player-base">Base: --</div>
+        <div id="player-resources">Resources: --</div>
+        <hr style="border: 1px solid #00ff00; margin: 8px 0;">
+        <div id="player-location-btn" style="cursor: pointer; padding: 8px; background: #1a3a2a; border: 1px solid #00ff00; border-radius: 3px; text-align: center; margin-top: 8px;">
+            📍 YOUR LOCATION
+        </div>
+        <div id="location-details" style="font-size: 10px; margin-top: 8px; display: none; color: #ffaa00;">
+            Location info will appear here
+        </div>
+    </div>
+    
+    <div id="sector-info">
+        <div><strong>📍 Sector Information</strong></div>
+        <div id="sector-details">Click on a sector to view details</div>
+    </div>
+
     <script>
+        // ════════════════════════════════════════════════════════════════════
+        // GAME MAP SYSTEM - Synced with Telegram Bot Backend
+        // ════════════════════════════════════════════════════════════════════
+        
         const config = {
             type: Phaser.AUTO,
-            width: window.innerWidth,
-            height: window.innerHeight,
+            scale: { mode: Phaser.Scale.RESIZE, width: '100%', height: '100%' },
             backgroundColor: '#050a0f',
-            physics: { default: 'arcade' },
+            input: { activePointers: 3 },
             scene: { preload, create, update }
         };
 
         const game = new Phaser.Game(config);
+        
+        // ──── GLOBAL STATE ────
+        let gameState = {
+            userId: null,
+            currentSector: null,
+            playerData: null,
+            allSectors: {},
+            baseLocations: {},  // user_id -> {sector, x, y, name, level}
+            selectedSector: null
+        };
+        
+        let lastUpdate = 0;
+        const UPDATE_INTERVAL = 5000;  // Sync every 5 seconds
 
-        function preload() {
-            this.load.image('base', 'https://cdn.phaser.io/sandbox/square-earth.png');
+        // ──── INITIALIZE USER ────
+        function initializeUser() {
+            const params = new URLSearchParams(window.location.search);
+            gameState.userId = params.get('user_id') || localStorage.getItem('user_id');
+            
+            if (gameState.userId) {
+                console.log('✅ User initialized:', gameState.userId);
+                localStorage.setItem('user_id', gameState.userId);
+                updateConnectionStatus('success', '✅ Connected');
+                setupLocationButton();
+                return true;
+            } else {
+                console.warn('⚠️ No user_id provided');
+                updateConnectionStatus('error', '❌ No User ID');
+                return false;
+            }
         }
 
-        function create() {
+        // ──── LOCATION BUTTON ────
+        function setupLocationButton() {
+            const btn = document.getElementById('player-location-btn');
+            btn.addEventListener('click', () => {
+                const details = document.getElementById('location-details');
+                if (details.style.display === 'none') {
+                    showLocationDetails();
+                    details.style.display = 'block';
+                    btn.style.background = '#2a5a3a';
+                } else {
+                    details.style.display = 'none';
+                    btn.style.background = '#1a3a2a';
+                }
+            });
+        }
 
-            this.cameras.main.setZoom(0.8); // Slightly zoomed out to see the tactical view
-            // 1. World & Camera Setup
-            const worldSize = 3000; // Even bigger for more "Separation"
-            this.cameras.main.setBounds(0, 0, worldSize, worldSize);
-            
-            // 2. Draw Visual Grid
-            graphics.lineStyle(1, 0x1a2a3a, 1);
-            for (let i = 0; i <= worldSize; i += 100) {
-                graphics.lineBetween(i, 0, i, worldSize);
-                graphics.lineBetween(0, i, 2000, i);
+        function showLocationDetails() {
+            const details = document.getElementById('location-details');
+            if (!gameState.playerData) {
+                details.innerHTML = '⚠️ Location data loading...';
+                return;
             }
 
-            // 3. HARD-WIRED KEYBOARD (WASD + Arrows)
-            // This ensures the game captures the keys immediately
-            this.keys = this.input.keyboard.addKeys({
-                up: Phaser.Input.Keyboard.KeyCodes.W,
-                down: Phaser.Input.Keyboard.KeyCodes.S,
-                left: Phaser.Input.Keyboard.KeyCodes.A,
-                right: Phaser.Input.Keyboard.KeyCodes.D,
-                upArrow: Phaser.Input.Keyboard.KeyCodes.UP,
-                downArrow: Phaser.Input.Keyboard.KeyCodes.DOWN,
-                leftArrow: Phaser.Input.Keyboard.KeyCodes.LEFT,
-                rightArrow: Phaser.Input.Keyboard.KeyCodes.RIGHT
-            });
+            const pd = gameState.playerData;
+            const sector = pd.sector || '?';
+            const sectorData = gameState.allSectors[sector];
+            
+            let html = `<strong>📍 YOU ARE HERE</strong><br>`;
+            html += `Sector: <strong>${sector}</strong><br>`;
+            if (sectorData) {
+                html += `Grid: (${sectorData.gridX}x${sectorData.gridY})<br>`;
+            }
+            html += `Base: <strong>${pd.base_name || 'Unnamed'}</strong><br>`;
+            html += `Level: <strong>${pd.level}</strong><br>`;
+            
+            // Add teleport info if available
+            if (pd.teleport_available) {
+                html += `<br><strong>⚡ Teleport Available</strong><br>`;
+                html += `Ready to move to another sector`;
+            }
+            
+            details.innerHTML = html;
+        }
 
-            // 4. ROBUST DRAGGING (Using 'pointerdown' offset)
-            this.input.on('pointerdown', (pointer) => {
-                this.dragStartX = this.cameras.main.scrollX + pointer.x;
-                this.dragStartY = this.cameras.main.scrollY + pointer.y;
-            });
+        // ──── API CALLS ────
+        async function fetchPlayerData() {
+            if (!gameState.userId) return null;
+            
+            try {
+                // Fetch from your backend API
+                const response = await fetch(`/api/player/${gameState.userId}`, {
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    gameState.playerData = data;
+                    gameState.currentSector = data.sector;
+                    return data;
+                }
+            } catch (e) {
+                console.debug('API call to /api/player failed (expected in local dev)');
+                // Return mock data for development
+                return getMockPlayerData();
+            }
+        }
 
-            this.input.on('pointermove', (pointer) => {
-                if (pointer.isDown) {
-                    this.cameras.main.scrollX = this.dragStartX - pointer.x;
-                    this.cameras.main.scrollY = this.dragStartY - pointer.y;
+        async function fetchAllBases() {
+            try {
+                const response = await fetch('/api/all_bases', {
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    return data.bases || [];
+                }
+            } catch (e) {
+                console.debug('Failed to fetch bases');
+                return getMockBases();
+            }
+        }
+
+        // ──── MOCK DATA (for development) ────
+        function getMockPlayerData() {
+            return {
+                user_id: gameState.userId,
+                username: `Player_${gameState.userId.slice(-4)}`,
+                sector: Math.floor(Math.random() * 9) + 1,
+                level: Math.floor(Math.random() * 25) + 1,
+                base_name: 'Fortress Alpha',
+                base_resources: {
+                    resources: {
+                        wood: Math.floor(Math.random() * 500),
+                        bronze: Math.floor(Math.random() * 300),
+                        iron: Math.floor(Math.random() * 100)
+                    },
+                    food: Math.floor(Math.random() * 200)
+                },
+                wins: Math.floor(Math.random() * 50),
+                war_points: Math.floor(Math.random() * 5000)
+            };
+        }
+
+        function getMockBases() {
+            const bases = [];
+            const baseNames = ['Obsidian Keep', 'Crystal Spire', 'Iron Fortress', 'Shadow Hold', 'Golden Peak'];
+            
+            for (let i = 0; i < 15; i++) {
+                const sector = Math.floor(Math.random() * 9) + 1;
+                bases.push({
+                    user_id: `player_${i}`,
+                    username: `Player${i}`,
+                    sector: sector,
+                    base_name: baseNames[i % baseNames.length],
+                    level: Math.floor(Math.random() * 30) + 1,
+                    war_points: Math.floor(Math.random() * 10000)
+                });
+            }
+            return bases;
+        }
+
+        // ──── UI UPDATES ────
+        function updateConnectionStatus(status, msg) {
+            const el = document.getElementById('connection-status');
+            el.textContent = msg;
+            el.className = status;
+        }
+
+        function updatePlayerInfo() {
+            if (!gameState.playerData) return;
+            
+            const p = gameState.playerData;
+            const resources = p.base_resources?.resources || {};
+            
+            document.getElementById('player-name').textContent = `👤 ${p.username} (Lv${p.level})`;
+            document.getElementById('player-sector').textContent = `📍 Sector: ${p.sector} | 🎖️ ${p.war_points} pts`;
+            document.getElementById('player-base').textContent = `🏰 ${p.base_name || 'Base Not Setup'}`;
+            document.getElementById('player-resources').textContent = 
+                `🪵${resources.wood} 🧱${resources.bronze} ⛓️${resources.iron}`;
+        }
+
+        function updateSectorInfo(sectorNum) {
+            const bases = Object.values(gameState.baseLocations)
+                .filter(b => b.sector === sectorNum);
+            
+            let info = `📍 *SECTOR ${sectorNum}*\n\n`;
+            
+            // Highlight player's base if in this sector
+            if (gameState.playerData && gameState.playerData.sector === sectorNum) {
+                info += `👤 *YOUR BASE HERE*\n`;
+                info += `   Base: ${gameState.playerData.base_name}\n`;
+                info += `   Level: ${gameState.playerData.level}\n\n`;
+            }
+            
+            if (bases.length > 0) {
+                info += `🏰 **OTHER BASES (${bases.length}):**\n`;
+                bases.slice(0, 5).forEach(b => {
+                    if (gameState.playerData && b.user_id === gameState.playerData.user_id) {
+                        return;  // Skip player's own base
+                    }
+                    info += `├─ ${b.name} (Lv${b.level})\n`;
+                });
+                if (bases.length > 5) info += `└─ +${bases.length - 5} more\n\n`;
+            } else {
+                info += `🏜️ Sector is empty\n\n`;
+            }
+            
+            info += `💡 Tap to view more details`;
+            document.getElementById('sector-details').textContent = info;
+        }
+
+        function preload() {}
+
+        // ──── CREATE SCENE ────
+        async function create() {
+            // Initialize user
+            if (!initializeUser()) {
+                console.error('Failed to initialize user');
+                return;
+            }
+            
+            // Fetch initial data
+            await fetchPlayerData();
+            const bases = await fetchAllBases();
+            
+            // Process bases into location map
+            bases.forEach(base => {
+                gameState.baseLocations[base.user_id] = {
+                    user_id: base.user_id,
+                    username: base.username,
+                    sector: base.sector,
+                    name: base.base_name,
+                    level: base.level,
+                    war_points: base.war_points
+                };
+            });
+            
+            updatePlayerInfo();
+            
+            const sectorSize = 2000;
+            const worldSize = sectorSize * 8;
+
+            this.cameras.main.setBounds(0, 0, worldSize, worldSize);
+            this.cameras.main.setZoom(0.05);
+            this.cameras.main.centerOn(worldSize/2, worldSize/2);
+
+            // ──── BUILD WORLD ────
+            for (let x = 0; x < 8; x++) {
+                for (let y = 0; y < 8; y++) {
+                    let posX = x * sectorSize;
+                    let posY = y * sectorSize;
+                    let sectorNum = x * 8 + y + 1;  // Sectors 1-64
+                    
+                    gameState.allSectors[sectorNum] = {
+                        x: posX + 1000,
+                        y: posY + 1000,
+                        gridX: x,
+                        gridY: y
+                    };
+
+                    let container = this.add.container(posX, posY);
+                    
+                    // Sector background
+                    let rect = this.add.rectangle(1000, 1000, 1980, 1980, 0x0a141d)
+                        .setStrokeStyle(4, 0x1a2b3c);
+                    container.add(rect);
+
+                    // Sector label
+                    let label = this.add.text(1000, 1000, sectorNum.toString(), { 
+                        font: 'bold 400px Arial', 
+                        fill: '#ffffff' 
+                    }).setOrigin(0.5).setAlpha(0.1);
+                    container.add(label);
+
+                    // Check if this is player's sector
+                    const isPlayerSector = gameState.currentSector === sectorNum;
+                    
+                    // HQ
+                    if ((x + y) !== 9) {
+                        let color = isPlayerSector ? 0xff00ff : 0x00ff00;
+                        let hq = this.add.rectangle(1000, 1000, 200, 200, color, 0.3)
+                            .setStrokeStyle(4, color);
+                        let hqText = this.add.text(1000, 1000, isPlayerSector ? "YOU" : "HQ", { 
+                            font: '40px Courier', 
+                            fill: color 
+                        }).setOrigin(0.5);
+                        
+                        container.add([hq, hqText]);
+                    }
+
+                    // Player current location indicator
+                    if (isPlayerSector && gameState.playerData) {
+                        // Add pulsing indicator
+                        let pulseCircle = this.add.circle(1000, 1000, 250, 0xff00ff, 0.1)
+                            .setStrokeStyle(3, 0xff00ff);
+                        let pulseText = this.add.text(1000, 1200, `${gameState.playerData.username}`, {
+                            font: 'bold 20px Arial',
+                            fill: '#ff00ff'
+                        }).setOrigin(0.5);
+                        
+                        container.add([pulseCircle, pulseText]);
+                    }
+
+                    // Spawn resources
+                    spawnResources(this, container, x, y);
+                    
+                    // Spawn bases in this sector
+                    spawnBasesInSector(this, container, sectorNum);
+                    
+                    // Make sector interactive
+                    let hitArea = this.add.rectangle(1000, 1000, 1980, 1980)
+                        .setFillStyle(0, 0)
+                        .setInteractive();
+                    hitArea.sectorNum = sectorNum;
+                    hitArea.on('pointerdown', () => {
+                        updateSectorInfo(sectorNum);
+                        console.log(`Clicked sector ${sectorNum}`);
+                    });
+                    container.add(hitArea);
+                    
+                    this.add.container(posX, posY, container);
+                }
+            }
+
+            // ──── START SYNC LOOP ────
+            setInterval(() => syncGameState(this), UPDATE_INTERVAL);
+        }
+
+        function spawnResources(scene, container, sX, sY) {
+            const isIronWaste = (sX === 0 && sY > 0);
+            const count = isIronWaste ? 25 : 10;
+            
+            for (let i = 0; i < count; i++) {
+                const color = isIronWaste ? 0x888888 : 0xffaa00;
+                const size = isIronWaste ? 15 : 20;
+                const circle = scene.add.circle(
+                    Math.random() * 1800 + 100,
+                    Math.random() * 1800 + 100,
+                    size,
+                    color
+                ).setAlpha(0.6);
+                container.add(circle);
+            }
+        }
+
+        function spawnBasesInSector(scene, container, sectorNum) {
+            const basesInSector = Object.values(gameState.baseLocations)
+                .filter(b => b.sector === sectorNum);
+            
+            basesInSector.slice(0, 4).forEach((base, idx) => {
+                const angle = (idx * Math.PI * 2) / Math.min(4, basesInSector.length);
+                const x = 1000 + Math.cos(angle) * 600;
+                const y = 1000 + Math.sin(angle) * 600;
+                
+                // Base fortress
+                const fortress = scene.add.rectangle(x, y, 120, 120, 0xaa6600, 0.7)
+                    .setStrokeStyle(3, 0xffdd00);
+                
+                // Base label
+                const label = scene.add.text(x, y, `Lv${base.level}`, {
+                    font: 'bold 14px Arial',
+                    fill: '#ffdd00'
+                }).setOrigin(0.5);
+                
+                container.add([fortress, label]);
+            });
+        }
+
+        async function syncGameState(scene) {
+            const now = Date.now();
+            if (now - lastUpdate < UPDATE_INTERVAL) return;
+            
+            lastUpdate = now;
+            
+            try {
+                const newData = await fetchPlayerData();
+                if (newData) {
+                    gameState.playerData = newData;
+                    updatePlayerInfo();
+                    updateConnectionStatus('success', '✅ Synced');
+                }
+            } catch (e) {
+                updateConnectionStatus('error', '❌ Sync failed');
+            }
+        }
+
+        function update() {
+            let zoom = this.cameras.main.zoom;
+            let p1 = this.input.pointer1;
+            let p2 = this.input.pointer2;
+
+            // Perspective shift
+            Object.values(gameState.allSectors).forEach(s => {
+                if (zoom > 0.8) {
+                    // Apply tilt effect when zoomed in
+                } else {
+                    // Reset when zoomed out
                 }
             });
 
-            // 5. Create Bases
-            createBase(this, 400, 400, "Checkmate HQ", 0x00ff00);
-            createBase(this, 1500, 1200, "Rival-X", 0xff0000); // Moved further away
-
-            // 6. HUD (Always visible)
-                this.eventLog = [
-                    "🛰️ Satellite Uplink: ACTIVE",
-                    "📡 Signals detected in Southern Ridge",
-                    "⚔️ War Update: Rival-X is mobilizing..."
-                ];
-
-                this.hudText = this.add.text(20, 20, this.eventLog.join('\n'), {
-                    font: '14px Courier',
-                    fill: '#00ff00',
-                    backgroundColor: '#000000aa',
-                    padding: { x: 10, y: 10 }
-                }).setScrollFactor(0);
-            // 2. Function to spawn Resources
-            for (let i = 0; i < 15; i++) {
-                let x = Phaser.Math.Between(200, 2800);
-                let y = Phaser.Math.Between(200, 2800);
-                
-                // Don't spawn too close to Checkmate HQ
-                if (Phaser.Math.Distance.Between(x, y, 400, 400) < 300) continue;
-
-                let node = this.add.circle(x, y, 15, 0xffcc00).setStrokeStyle(2, 0xffffff);
-                this.resources.add(node);
-                
-                // Label it
-                this.add.text(x, y + 20, "SILVER NODE", { font: '10px Courier', fill: '#ffcc00' }).setOrigin(0.5);
-                
-                // Make it clickable to "Mine"
-                node.setInteractive().on('pointerdown', (pointer, localX, localY, event) => {
-                    event.stopPropagation();
-                    alert("MINING UNIT DISPATCHED...\nEstimated Yield: 45 Silver");
-                });
+            // Pinch to zoom
+            if (p1.isDown && p2.isDown) {
+                let dist = Phaser.Math.Distance.Between(p1.x, p1.y, p2.x, p2.y);
+                if (this.lastPinchDist > 0) {
+                    let zoomChange = (dist - this.lastPinchDist) * 0.0005;
+                    this.cameras.main.zoom = Phaser.Math.Clamp(zoom + zoomChange, 0.04, 1.8);
+                }
+                this.lastPinchDist = dist;
+            } else {
+                this.lastPinchDist = 0;
             }
 
-            // 3. Add a "Native Fortress" (The Danger Zone)
-            let nativeX = 2200, nativeY = 1800;
-            let fortress = this.add.triangle(nativeX, nativeY, 0, 80, 40, 0, 80, 80, 0xff0000, 0.5).setStrokeStyle(3, 0xff0000);
-            this.add.text(nativeX, nativeY + 60, "⚠️ NATIVE OUTPOST", { font: 'bold 14px Courier', fill: '#ff0000' }).setOrigin(0.5);
+            // Pan (drag)
+            if (p1.isDown && !p2.isDown) {
+                if (p1.prevPosition) {
+                    this.cameras.main.scrollX -= (p1.x - p1.prevPosition.x) / zoom;
+                    this.cameras.main.scrollY -= (p1.y - p1.prevPosition.y) / zoom;
+                }
+            }
 
-            fortress.setInteractive().on('pointerdown', (pointer, localX, localY, event) => {
-                event.stopPropagation();
-                alert("🚨 WARNING: SECTOR NATIVES HOSTILE\nPower Level: 85\n'They don't want you here, Muyiwa.'");
-            });
-            this.cameras.main.setBounds(0, 0, worldSize, worldSize);
-    
-    // 1. Tactical Grid & Background
-    let graphics = this.add.graphics();
-    graphics.lineStyle(1, 0x1a2a3a, 0.5);
-    for (let i = 0; i <= worldSize; i += 100) {
-        graphics.lineBetween(i, 0, i, worldSize);
-        graphics.lineBetween(0, i, worldSize, i);
-    }
-
-    // 2. THE PARTICLE ENGINE (For Combat/Mining Effects)
-    // This creates a glowing 'spark' effect whenever an action happens
-    this.sparks = this.add.particles(0, 0, 'mine', {
-        speed: { min: -100, max: 100 },
-        angle: { min: 0, max: 360 },
-        scale: { start: 0.2, end: 0 },
-        blendMode: 'ADD',
-        lifespan: 500,
-        emitting: false
-    });
-
-    // 3. SECTOR HAZARD: The "Void Storm"
-    // An animated danger zone that moves across the map
-    this.storm = this.add.circle(1500, 1500, 200, 0x00ffff, 0.15);
-    this.add.text(1500, 1500, "⚡ VOID STORM", { font: '12px Courier', fill: '#00ffff' }).setOrigin(0.5);
-    this.physics.add.existing(this.storm);
-
-    // 4. DYNAMIC MINING (Graphically Synced)
-    this.resources = this.add.group();
-    for (let i = 0; i < 20; i++) {
-        let x = Phaser.Math.Between(300, 2700);
-        let y = Phaser.Math.Between(300, 2700);
-        let node = this.add.circle(x, y, 10, 0xffcc00).setInteractive();
-        
-        node.on('pointerdown', (pointer) => {
-            // Trigger Particle Explosion at click point
-            this.sparks.emitParticleAt(pointer.worldX, pointer.worldY, 15);
-            this.cameras.main.shake(200, 0.005); // Screen shake for impact
-            console.log("Extraction started at:", x, y);
-        });
-    }
-
-    // 5. CONTROLS (WASD + Drag + Click-to-Focus)
-    this.keys = this.input.keyboard.addKeys('W,A,S,D');
-    this.input.on('pointerdown', (pointer) => {
-        this.dragStartX = this.cameras.main.scrollX + pointer.x;
-        this.dragStartY = this.cameras.main.scrollY + pointer.y;
-    });
-    this.input.on('pointermove', (pointer) => {
-        if (pointer.isDown) {
-            this.cameras.main.scrollX = this.dragStartX - pointer.x;
-            this.cameras.main.scrollY = this.dragStartY - pointer.y;
-        }
-    });
-
-    // 6. ADDICTIVE UI: THE NEWS TICKER
-    this.ticker = this.add.text(window.innerWidth / 2, 20, "--- SCANNING SECTOR 8 ---", {
-        font: '14px Courier', fill: '#00ff00', backgroundColor: '#000'
-    }).setOrigin(0.5).setScrollFactor(0);
-
-    createBase(this, 400, 400, "Checkmate HQ", 0x00ff00);
-}
-
-function update(time, delta) {
-    const cam = this.cameras.main;
-    const speed = 15;
-
-    // WASD Movement
-    if (this.keys.A.isDown) cam.scrollX -= speed;
-    if (this.keys.D.isDown) cam.scrollX += speed;
-    if (this.keys.W.isDown) cam.scrollY -= speed;
-    if (this.keys.S.isDown) cam.scrollY += speed;
-
-    // 7. SYNCED GRAPHICS: Storm Movement
-    // The storm floats around the map automatically
-    this.storm.x = 1500 + Math.sin(time / 2000) * 800;
-    this.storm.y = 1500 + Math.cos(time / 2000) * 800;
-
-    // News Ticker update
-    if (Math.floor(time / 3000) % 2 == 0) {
-        this.ticker.setText("⚠️ RADIATION DETECTED IN VOID STORM");
-    } else {
-        this.ticker.setText("💰 SILVER RESERVES LOCATED IN SOUTHERN QUADRANT");
-    }
-}
-
-        function createBase(scene, x, y, name, color) {
-            let container = scene.add.container(x, y);
-            let rect = scene.add.rectangle(0, 0, 80, 80, color, 0.2).setStrokeStyle(2, color);
-            let text = scene.add.text(0, 55, name, { font: '14px Courier', fill: '#fff' }).setOrigin(0.5);
-            container.add([rect, text]);
-            
-            rect.setInteractive();
-            rect.on('pointerdown', (pointer, localX, localY, event) => {
-                event.stopPropagation(); // Prevents map from moving when clicking base
-                alert(`CONNECTED TO ${name}\nStatus: Tactical View Active`);
-            });
+            // Update UI with current position
+            document.getElementById('zoom-level').textContent = `Zoom: ${(zoom * 100).toFixed(0)}%`;
+            document.getElementById('coordinates').textContent = 
+                `Pos: (${Math.round(this.cameras.main.scrollX)}, ${Math.round(this.cameras.main.scrollY)})`;
         }
     </script>
 </body>
