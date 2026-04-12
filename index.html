@@ -29,12 +29,13 @@
         }
 
         function create() {
+
+            this.cameras.main.setZoom(0.8); // Slightly zoomed out to see the tactical view
             // 1. World & Camera Setup
             const worldSize = 3000; // Even bigger for more "Separation"
             this.cameras.main.setBounds(0, 0, worldSize, worldSize);
             
             // 2. Draw Visual Grid
-            let graphics = this.add.graphics();
             graphics.lineStyle(1, 0x1a2a3a, 1);
             for (let i = 0; i <= worldSize; i += 100) {
                 graphics.lineBetween(i, 0, i, worldSize);
@@ -72,24 +73,133 @@
             createBase(this, 1500, 1200, "Rival-X", 0xff0000); // Moved further away
 
             // 6. HUD (Always visible)
-            this.add.text(20, 20, "🛰️ SYSTEM ONLINE | WASD TO SCAN", {
-                font: '16px Courier', fill: '#00ff00'
-            }).setScrollFactor(0);
-        }
+                this.eventLog = [
+                    "🛰️ Satellite Uplink: ACTIVE",
+                    "📡 Signals detected in Southern Ridge",
+                    "⚔️ War Update: Rival-X is mobilizing..."
+                ];
 
-        function update() {
-            const cam = this.cameras.main;
-            const speed = 15;
+                this.hudText = this.add.text(20, 20, this.eventLog.join('\n'), {
+                    font: '14px Courier',
+                    fill: '#00ff00',
+                    backgroundColor: '#000000aa',
+                    padding: { x: 10, y: 10 }
+                }).setScrollFactor(0);
+            // 2. Function to spawn Resources
+            for (let i = 0; i < 15; i++) {
+                let x = Phaser.Math.Between(200, 2800);
+                let y = Phaser.Math.Between(200, 2800);
+                
+                // Don't spawn too close to Checkmate HQ
+                if (Phaser.Math.Distance.Between(x, y, 400, 400) < 300) continue;
 
-            // Move Left
-            if (this.keys.left.isDown || this.keys.leftArrow.isDown) cam.scrollX -= speed;
-            // Move Right
-            if (this.keys.right.isDown || this.keys.rightArrow.isDown) cam.scrollX += speed;
-            // Move Up (Fixes your broken key!)
-            if (this.keys.up.isDown || this.keys.upArrow.isDown) cam.scrollY -= speed;
-            // Move Down
-            if (this.keys.down.isDown || this.keys.downArrow.isDown) cam.scrollY += speed;
+                let node = this.add.circle(x, y, 15, 0xffcc00).setStrokeStyle(2, 0xffffff);
+                this.resources.add(node);
+                
+                // Label it
+                this.add.text(x, y + 20, "SILVER NODE", { font: '10px Courier', fill: '#ffcc00' }).setOrigin(0.5);
+                
+                // Make it clickable to "Mine"
+                node.setInteractive().on('pointerdown', (pointer, localX, localY, event) => {
+                    event.stopPropagation();
+                    alert("MINING UNIT DISPATCHED...\nEstimated Yield: 45 Silver");
+                });
+            }
+
+            // 3. Add a "Native Fortress" (The Danger Zone)
+            let nativeX = 2200, nativeY = 1800;
+            let fortress = this.add.triangle(nativeX, nativeY, 0, 80, 40, 0, 80, 80, 0xff0000, 0.5).setStrokeStyle(3, 0xff0000);
+            this.add.text(nativeX, nativeY + 60, "⚠️ NATIVE OUTPOST", { font: 'bold 14px Courier', fill: '#ff0000' }).setOrigin(0.5);
+
+            fortress.setInteractive().on('pointerdown', (pointer, localX, localY, event) => {
+                event.stopPropagation();
+                alert("🚨 WARNING: SECTOR NATIVES HOSTILE\nPower Level: 85\n'They don't want you here, Muyiwa.'");
+            });
+            this.cameras.main.setBounds(0, 0, worldSize, worldSize);
+    
+    // 1. Tactical Grid & Background
+    let graphics = this.add.graphics();
+    graphics.lineStyle(1, 0x1a2a3a, 0.5);
+    for (let i = 0; i <= worldSize; i += 100) {
+        graphics.lineBetween(i, 0, i, worldSize);
+        graphics.lineBetween(0, i, worldSize, i);
+    }
+
+    // 2. THE PARTICLE ENGINE (For Combat/Mining Effects)
+    // This creates a glowing 'spark' effect whenever an action happens
+    this.sparks = this.add.particles(0, 0, 'mine', {
+        speed: { min: -100, max: 100 },
+        angle: { min: 0, max: 360 },
+        scale: { start: 0.2, end: 0 },
+        blendMode: 'ADD',
+        lifespan: 500,
+        emitting: false
+    });
+
+    // 3. SECTOR HAZARD: The "Void Storm"
+    // An animated danger zone that moves across the map
+    this.storm = this.add.circle(1500, 1500, 200, 0x00ffff, 0.15);
+    this.add.text(1500, 1500, "⚡ VOID STORM", { font: '12px Courier', fill: '#00ffff' }).setOrigin(0.5);
+    this.physics.add.existing(this.storm);
+
+    // 4. DYNAMIC MINING (Graphically Synced)
+    this.resources = this.add.group();
+    for (let i = 0; i < 20; i++) {
+        let x = Phaser.Math.Between(300, 2700);
+        let y = Phaser.Math.Between(300, 2700);
+        let node = this.add.circle(x, y, 10, 0xffcc00).setInteractive();
+        
+        node.on('pointerdown', (pointer) => {
+            // Trigger Particle Explosion at click point
+            this.sparks.emitParticleAt(pointer.worldX, pointer.worldY, 15);
+            this.cameras.main.shake(200, 0.005); // Screen shake for impact
+            console.log("Extraction started at:", x, y);
+        });
+    }
+
+    // 5. CONTROLS (WASD + Drag + Click-to-Focus)
+    this.keys = this.input.keyboard.addKeys('W,A,S,D');
+    this.input.on('pointerdown', (pointer) => {
+        this.dragStartX = this.cameras.main.scrollX + pointer.x;
+        this.dragStartY = this.cameras.main.scrollY + pointer.y;
+    });
+    this.input.on('pointermove', (pointer) => {
+        if (pointer.isDown) {
+            this.cameras.main.scrollX = this.dragStartX - pointer.x;
+            this.cameras.main.scrollY = this.dragStartY - pointer.y;
         }
+    });
+
+    // 6. ADDICTIVE UI: THE NEWS TICKER
+    this.ticker = this.add.text(window.innerWidth / 2, 20, "--- SCANNING SECTOR 8 ---", {
+        font: '14px Courier', fill: '#00ff00', backgroundColor: '#000'
+    }).setOrigin(0.5).setScrollFactor(0);
+
+    createBase(this, 400, 400, "Checkmate HQ", 0x00ff00);
+}
+
+function update(time, delta) {
+    const cam = this.cameras.main;
+    const speed = 15;
+
+    // WASD Movement
+    if (this.keys.A.isDown) cam.scrollX -= speed;
+    if (this.keys.D.isDown) cam.scrollX += speed;
+    if (this.keys.W.isDown) cam.scrollY -= speed;
+    if (this.keys.S.isDown) cam.scrollY += speed;
+
+    // 7. SYNCED GRAPHICS: Storm Movement
+    // The storm floats around the map automatically
+    this.storm.x = 1500 + Math.sin(time / 2000) * 800;
+    this.storm.y = 1500 + Math.cos(time / 2000) * 800;
+
+    // News Ticker update
+    if (Math.floor(time / 3000) % 2 == 0) {
+        this.ticker.setText("⚠️ RADIATION DETECTED IN VOID STORM");
+    } else {
+        this.ticker.setText("💰 SILVER RESERVES LOCATED IN SOUTHERN QUADRANT");
+    }
+}
 
         function createBase(scene, x, y, name, color) {
             let container = scene.add.container(x, y);
