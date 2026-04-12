@@ -7,18 +7,18 @@
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser-arcade-physics.min.js"></script>
     <style>
         body { margin: 0; padding: 0; overflow: hidden; background-color: #050a0f; }
-        canvas { display: block; }
+        canvas { display: block; cursor: grab; }
+        canvas:active { cursor: grabbing; }
     </style>
 </head>
 <body>
     <script>
-        // PASTE YOUR PHASER CODE BELOW THIS LINE
         const config = {
             type: Phaser.AUTO,
             width: window.innerWidth,
             height: window.innerHeight,
             backgroundColor: '#050a0f',
-            physics: { default: 'arcade', arcade: { debug: false } },
+            physics: { default: 'arcade' },
             scene: { preload, create, update }
         };
 
@@ -26,59 +26,82 @@
 
         function preload() {
             this.load.image('base', 'https://cdn.phaser.io/sandbox/square-earth.png');
-            this.load.image('mine', 'https://labs.phaser.io/assets/sprites/orb-blue.png');
         }
 
-                function create() {
-        // 1. Grid & Bounds (Keep this as your foundation)
-        let graphics = this.add.graphics();
-        graphics.lineStyle(1, 0x1a2a3a, 1);
-        for (let i = 0; i <= 2000; i += 100) {
-            graphics.lineBetween(i, 0, i, 2000);
-            graphics.lineBetween(0, i, 2000, i);
+        function create() {
+            // 1. World & Camera Setup
+            const worldSize = 3000; // Even bigger for more "Separation"
+            this.cameras.main.setBounds(0, 0, worldSize, worldSize);
+            
+            // 2. Draw Visual Grid
+            let graphics = this.add.graphics();
+            graphics.lineStyle(1, 0x1a2a3a, 1);
+            for (let i = 0; i <= worldSize; i += 100) {
+                graphics.lineBetween(i, 0, i, worldSize);
+                graphics.lineBetween(0, i, 2000, i);
+            }
+
+            // 3. HARD-WIRED KEYBOARD (WASD + Arrows)
+            // This ensures the game captures the keys immediately
+            this.keys = this.input.keyboard.addKeys({
+                up: Phaser.Input.Keyboard.KeyCodes.W,
+                down: Phaser.Input.Keyboard.KeyCodes.S,
+                left: Phaser.Input.Keyboard.KeyCodes.A,
+                right: Phaser.Input.Keyboard.KeyCodes.D,
+                upArrow: Phaser.Input.Keyboard.KeyCodes.UP,
+                downArrow: Phaser.Input.Keyboard.KeyCodes.DOWN,
+                leftArrow: Phaser.Input.Keyboard.KeyCodes.LEFT,
+                rightArrow: Phaser.Input.Keyboard.KeyCodes.RIGHT
+            });
+
+            // 4. ROBUST DRAGGING (Using 'pointerdown' offset)
+            this.input.on('pointerdown', (pointer) => {
+                this.dragStartX = this.cameras.main.scrollX + pointer.x;
+                this.dragStartY = this.cameras.main.scrollY + pointer.y;
+            });
+
+            this.input.on('pointermove', (pointer) => {
+                if (pointer.isDown) {
+                    this.cameras.main.scrollX = this.dragStartX - pointer.x;
+                    this.cameras.main.scrollY = this.dragStartY - pointer.y;
+                }
+            });
+
+            // 5. Create Bases
+            createBase(this, 400, 400, "Checkmate HQ", 0x00ff00);
+            createBase(this, 1500, 1200, "Rival-X", 0xff0000); // Moved further away
+
+            // 6. HUD (Always visible)
+            this.add.text(20, 20, "🛰️ SYSTEM ONLINE | WASD TO SCAN", {
+                font: '16px Courier', fill: '#00ff00'
+            }).setScrollFactor(0);
         }
-        this.cameras.main.setBounds(0, 0, 2000, 2000);
 
-        // 2. Setup WASD + Arrow Keys
-        this.keys = this.input.keyboard.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT');
+        function update() {
+            const cam = this.cameras.main;
+            const speed = 15;
 
-        // 3. IMPROVED Mouse Dragging (More responsive)
-        this.input.on('pointermove', (pointer) => {
-            if (!pointer.isDown) return;
-            
-            // We calculate the delta (change) between current and previous frame
-            const moveX = pointer.x - pointer.prevPosition.x;
-            const moveY = pointer.y - pointer.prevPosition.y;
-            
-            this.cameras.main.scrollX -= moveX;
-            this.cameras.main.scrollY -= moveY;
-        });
-
-        // 4. Create Bases
-        this.myBase = createBase(this, 400, 400, "Checkmate HQ", 0x00ff00);
-        this.rivalBase = createBase(this, 1200, 800, "Rival-X", 0xff0000);
-    }
-
-    function update() {
-        const cam = this.cameras.main;
-        const speed = 12; // Increased speed for better scanning
-
-        // 5. WASD & Arrow Key Movement Combined
-        if (this.keys.A.isDown || this.keys.LEFT.isDown) cam.scrollX -= speed;
-        if (this.keys.D.isDown || this.keys.RIGHT.isDown) cam.scrollX += speed;
-        if (this.keys.W.isDown || this.keys.UP.isDown) cam.scrollY -= speed;
-        if (this.keys.S.isDown || this.keys.DOWN.isDown) cam.scrollY += speed;
-    }
+            // Move Left
+            if (this.keys.left.isDown || this.keys.leftArrow.isDown) cam.scrollX -= speed;
+            // Move Right
+            if (this.keys.right.isDown || this.keys.rightArrow.isDown) cam.scrollX += speed;
+            // Move Up (Fixes your broken key!)
+            if (this.keys.up.isDown || this.keys.upArrow.isDown) cam.scrollY -= speed;
+            // Move Down
+            if (this.keys.down.isDown || this.keys.downArrow.isDown) cam.scrollY += speed;
+        }
 
         function createBase(scene, x, y, name, color) {
             let container = scene.add.container(x, y);
-            let icon = scene.add.rectangle(0, 0, 80, 80, color, 0.3).setStrokeStyle(2, color);
-            let label = scene.add.text(0, 50, name, { font: '12px Arial', fill: '#fff' }).setOrigin(0.5);
-            container.add([icon, label]);
-            icon.setInteractive().on('pointerdown', () => {
-                alert(`ACCESSING ${name} DATA...`);
+            let rect = scene.add.rectangle(0, 0, 80, 80, color, 0.2).setStrokeStyle(2, color);
+            let text = scene.add.text(0, 55, name, { font: '14px Courier', fill: '#fff' }).setOrigin(0.5);
+            container.add([rect, text]);
+            
+            rect.setInteractive();
+            rect.on('pointerdown', (pointer, localX, localY, event) => {
+                event.stopPropagation(); // Prevents map from moving when clicking base
+                alert(`CONNECTED TO ${name}\nStatus: Tactical View Active`);
             });
-            return container;
         }
     </script>
 </body>
