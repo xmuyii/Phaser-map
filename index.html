@@ -29,28 +29,46 @@
             this.load.image('mine', 'https://labs.phaser.io/assets/sprites/orb-blue.png');
         }
 
-        function create() {
-            let graphics = this.add.graphics();
-            graphics.lineStyle(1, 0x1a2a3a, 1);
-            for (let i = 0; i <= 2000; i += 100) {
-                graphics.lineBetween(i, 0, i, 2000);
-                graphics.lineBetween(0, i, 2000, i);
-            }
-            this.cameras.main.setBounds(0, 0, 2000, 2000);
-            this.cursors = this.input.keyboard.createCursorKeys();
-            this.myBase = createBase(this, 400, 400, "Checkmate HQ", 0x00ff00);
-            this.rivalBase = createBase(this, 1200, 800, "Rival-X", 0xff0000);
-            this.hud = this.add.text(20, 20, "🛰️ SATELLITE UPLINK: ACTIVE | SECTOR 8", {
-                font: 'bold 18px Courier', fill: '#00ff00'
-            }).setScrollFactor(0);
+                function create() {
+        // 1. Grid & Bounds (Keep this as your foundation)
+        let graphics = this.add.graphics();
+        graphics.lineStyle(1, 0x1a2a3a, 1);
+        for (let i = 0; i <= 2000; i += 100) {
+            graphics.lineBetween(i, 0, i, 2000);
+            graphics.lineBetween(0, i, 2000, i);
         }
+        this.cameras.main.setBounds(0, 0, 2000, 2000);
 
-        function update() {
-            if (this.cursors.left.isDown) this.cameras.main.scrollX -= 7;
-            if (this.cursors.right.isDown) this.cameras.main.scrollX += 7;
-            if (this.cursors.up.isDown) this.cameras.main.scrollY -= 7;
-            if (this.cursors.down.isDown) this.cameras.main.scrollY += 7;
-        }
+        // 2. Setup WASD + Arrow Keys
+        this.keys = this.input.keyboard.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT');
+
+        // 3. IMPROVED Mouse Dragging (More responsive)
+        this.input.on('pointermove', (pointer) => {
+            if (!pointer.isDown) return;
+            
+            // We calculate the delta (change) between current and previous frame
+            const moveX = pointer.x - pointer.prevPosition.x;
+            const moveY = pointer.y - pointer.prevPosition.y;
+            
+            this.cameras.main.scrollX -= moveX;
+            this.cameras.main.scrollY -= moveY;
+        });
+
+        // 4. Create Bases
+        this.myBase = createBase(this, 400, 400, "Checkmate HQ", 0x00ff00);
+        this.rivalBase = createBase(this, 1200, 800, "Rival-X", 0xff0000);
+    }
+
+    function update() {
+        const cam = this.cameras.main;
+        const speed = 12; // Increased speed for better scanning
+
+        // 5. WASD & Arrow Key Movement Combined
+        if (this.keys.A.isDown || this.keys.LEFT.isDown) cam.scrollX -= speed;
+        if (this.keys.D.isDown || this.keys.RIGHT.isDown) cam.scrollX += speed;
+        if (this.keys.W.isDown || this.keys.UP.isDown) cam.scrollY -= speed;
+        if (this.keys.S.isDown || this.keys.DOWN.isDown) cam.scrollY += speed;
+    }
 
         function createBase(scene, x, y, name, color) {
             let container = scene.add.container(x, y);
