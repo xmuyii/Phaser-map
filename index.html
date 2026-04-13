@@ -234,16 +234,6 @@
         // THE SIXTY4 - WORLD MAP SYSTEM - EXTREMELY ADDICTIVE EDITION
         // ════════════════════════════════════════════════════════════════════
         
-        const config = {
-            type: Phaser.AUTO,
-            scale: { mode: Phaser.Scale.RESIZE, width: '100%', height: '100%' },
-            backgroundColor: '#050a0f',
-            input: { activePointers: 3 },
-            scene: { preload, create, update, render }
-        };
-
-        const game = new Phaser.Game(config);
-        
         // ──── GLOBAL STATE ────
         let gameState = {
             userId: null,
@@ -254,11 +244,13 @@
             selectedSector: null,
             threats: [],
             alerts: [],
-            selectedTarget: null
+            selectedTarget: null,
+            sceneReady: false
         };
         
         let lastUpdate = 0;
         const UPDATE_INTERVAL = 3000;  // Sync every 3 seconds (faster!)
+        let gameScene = null;
 
         // ──── UTILITY FUNCTIONS ────
         function addAlert(msg, type = 'warning') {
@@ -295,18 +287,36 @@
             if (gameState.userId) {
                 console.log('✅ User initialized:', gameState.userId);
                 localStorage.setItem('user_id', gameState.userId);
-                updateConnectionStatus('success', '✅ Connected');
+                updateConnectionStatus('success', '✅ Initializing...');
                 setupActionButtons();
                 return true;
             } else {
-                console.warn('⚠️ No user_id provided');
-                updateConnectionStatus('error', '❌ No User ID');
-                return false;
+                console.warn('⚠️ No user_id provided - using demo mode');
+                gameState.userId = 'demo_' + Math.random().toString(36).substr(2, 9);
+                localStorage.setItem('user_id', gameState.userId);
+                updateConnectionStatus('warning', '⚠️ Demo Mode');
+                setupActionButtons();
+                return true;
             }
         }
 
         // ──── ACTION BUTTONS ────
         function setupActionButtons() {
+            const btn = document.getElementById('player-location-btn');
+            if (btn) {
+                btn.addEventListener('click', () => {
+                    const details = document.getElementById('location-details');
+                    if (details.style.display === 'none') {
+                        showLocationDetails();
+                        details.style.display = 'block';
+                        btn.style.background = '#2a5a4a';
+                    } else {
+                        details.style.display = 'none';
+                        btn.style.background = '#1a3a2a';
+                    }
+                });
+            }
+            
             document.getElementById('btn-use-weapon').onclick = () => {
                 addAlert('🔫 Open Telegram to use weapon: /use_weapon');
                 alert('Open your Telegram Bot and use /use_weapon command to select target');
@@ -345,15 +355,42 @@
                       '🔫 Use weapons from the action panel\n' +
                       '💥 Raid enemy bases for resources\n' +
                       '🔍 Scout before attacking\n' +
-                      '⚡ Teleport to new sectors\n'\n' +
+                      '⚡ Teleport to new sectors\n' +
                       '🎯 Strategy: Scout → Plan → Attack → Raid!\n' +
                       '📊 Higher level = stronger weapons');
             };
         }
 
+        function showLocationDetails() {
+            const details = document.getElementById('location-details');
+            if (!gameState.playerData) {
+                details.innerHTML = '⚠️ Location data loading...';
+                return;
+            }
+
+            const pd = gameState.playerData;
+            const sector = pd.sector || '?';
+            const sectorData = gameState.allSectors[sector];
+            
+            let html = `<strong>📍 YOU ARE HERE</strong><br>`;
+            html += `Sector: <strong>${sector}</strong><br>`;
+            if (sectorData) {
+                html += `Grid: (${sectorData.gridX}x${sectorData.gridY})<br>`;
+            }
+            html += `Base: <strong>${pd.base_name || 'Unnamed'}</strong><br>`;
+            html += `Level: <strong>${pd.level}</strong><br>`;
+            
+            if (pd.teleport_available) {
+                html += `<br><strong>⚡ Teleport Available</strong><br>`;
+                html += `Ready to move to another sector`;
+            }
+            
+            details.innerHTML = html;
+        }
+
         // ──── API CALLS ────
         async function fetchPlayerData() {
-            if (!gameState.userId) return null;
+            if (!gameState.userId) return getMockPlayerData();
             
             try {
                 const response = await fetch(`/api/player/${gameState.userId}`);
@@ -364,8 +401,9 @@
                     return data;
                 }
             } catch (e) {
-                return getMockPlayerData();
+                console.warn('Failed to fetch player data, using mock');
             }
+            return getMockPlayerData();
         }
 
         async function fetchAllBases() {
@@ -376,8 +414,9 @@
                     return data.bases || [];
                 }
             } catch (e) {
-                return getMockBases();
+                console.warn('Failed to fetch bases, using mock data');
             }
+            return getMockBases();
         }
 
         // ──── MOCK DATA ────
@@ -474,14 +513,65 @@
 
         function preload() {}
 
-        // ──── CREATE SCENE ────
-        async function create() {
-            if (!initializeUser()) return;
+        function create() {
+            gameScene = this;
+            console.log('🎮 Phaser scene created');
             
-            await fetchPlayerData();
-            const bases = await fetchAllBases();
+            if (!initializeUser()) {
+                console.error('Failed to initialize user');
+                return;
+            }
             
-            // Process bases
+            console.log('👤 User initialized:', gameState.userId);
+            
+            // Start data fetch immediately (async)
+            fetchDataAndBuildWorld.call(this);
+        }
+
+        function fetchDataAndBuildWorld() {
+            const self = this;
+            console.log('📊 Fetching game data...');
+            
+            // Set timeout to use mock data if API is slow
+            let dataLoadTimeout = setTimeout(() => {
+                if (!gameState.sceneReady) {
+                    console.warn('⏱️ Data fetch timeout - using mock data');
+                    useMockDataToRender.call(self);
+                }
+            }, 3000);
+            
+            Promise.all([fetchPlayerData(), fetchAllBases()]).then(([playerData, bases]) => {
+                clearTimeout(dataLoadTimeout);
+                
+                console.log('✅ Data fetched:', { playerData, bases });
+                
+                if (!playerData) {
+                    console.error('❌ No player data');
+                    updateConnectionStatus('error', '❌ Player data failed');
+                    return;
+                }
+                
+                if (!bases || bases.length === 0) {
+                    console.warn('⚠️ No bases found, using demo');
+                    bases = getMockBases();
+                }
+                
+                // Process bases
+                processBasesData(bases);
+                updatePlayerInfo();
+                buildWorldMap.call(self);
+                startSyncLoop();
+                gameState.sceneReady = true;
+                updateConnectionStatus('success', '✅ Map Ready');
+                addAlert('✅ Map loaded! Click sectors to interact.');
+            }).catch(err => {
+                clearTimeout(dataLoadTimeout);
+                console.error('❌ Data fetch error:', err);
+                updateConnectionStatus('error', '❌ Load failed');
+            });
+        }
+
+        function processBasesData(bases) {
             bases.forEach(base => {
                 gameState.baseLocations[base.user_id] = {
                     user_id: base.user_id,
@@ -499,9 +589,28 @@
                     gameState.threats.push(base);
                 }
             });
+            console.log('✅ Processed bases:', Object.keys(gameState.baseLocations).length);
+        }
+
+        function useMockDataToRender() {
+            const self = gameScene;
+            console.warn('🎮 Rendering with mock data');
             
+            if (!gameState.playerData) {
+                gameState.playerData = getMockPlayerData();
+            }
+            
+            const bases = getMockBases();
+            processBasesData(bases);
             updatePlayerInfo();
-            
+            buildWorldMap.call(self);
+            startSyncLoop();
+            gameState.sceneReady = true;
+            updateConnectionStatus('warning', '⚠️ Demo Mode');
+            addAlert('🎮 Running in demo mode!');
+        }
+
+        function buildWorldMap() {
             const sectorSize = 2000;
             const worldSize = sectorSize * 8;
 
@@ -509,7 +618,7 @@
             this.cameras.main.setZoom(0.05);
             this.cameras.main.centerOn(worldSize/2, worldSize/2);
 
-            // ──── BUILD WORLD ────
+            // BUILD WORLD
             for (let x = 0; x < 8; x++) {
                 for (let y = 0; y < 8; y++) {
                     let posX = x * sectorSize;
@@ -581,10 +690,8 @@
                         container.add([hq, hqText]);
                     }
 
-                    // Spawn resources
+                    // Spawn resources and bases
                     spawnResources(this, container, x, y);
-                    
-                    // Spawn bases and threats in sector
                     spawnBasesInSector(this, container, sectorNum);
                     
                     // Interactive hit area
@@ -596,16 +703,19 @@
                         gameState.selectedSector = sectorNum;
                         updateSectorInfo(sectorNum);
                         addAlert(`Selected Sector ${sectorNum}`);
-                        console.log(`Clicked sector ${sectorNum}`);
                     });
                     container.add(hitArea);
                     
                     this.add.container(posX, posY, container);
                 }
             }
+        }
 
-            // ──── START SYNC LOOP ────
-            setInterval(() => syncGameState(this), UPDATE_INTERVAL);
+        function startSyncLoop() {
+            console.log('🔄 Starting sync loop...');
+            setInterval(async () => {
+                await syncGameState();
+            }, UPDATE_INTERVAL);
         }
 
         function spawnResources(scene, container, sX, sY) {
@@ -678,7 +788,7 @@
             });
         }
 
-        async function syncGameState(scene) {
+        async function syncGameState() {
             const now = Date.now();
             if (now - lastUpdate < UPDATE_INTERVAL) return;
             
@@ -742,6 +852,19 @@
         function render() {
             // Render loop for any additional visual updates
         }
+
+        // ════════════════════════════════════════════════════════════════════
+        // INITIALIZE PHASER GAME AFTER ALL FUNCTIONS ARE DEFINED
+        // ════════════════════════════════════════════════════════════════════
+        const config = {
+            type: Phaser.AUTO,
+            scale: { mode: Phaser.Scale.RESIZE, width: '100%', height: '100%' },
+            backgroundColor: '#050a0f',
+            input: { activePointers: 3 },
+            scene: { preload, create, update, render }
+        };
+
+        const game = new Phaser.Game(config);
     </script>
 </body>
 </html>
