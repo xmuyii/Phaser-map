@@ -6,865 +6,1184 @@
     <title>The Sixty4 | World Map</title>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser-arcade-physics.min.js"></script>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        
-        body { 
-            overflow: hidden; 
-            background-color: #050a0f;
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            overflow: hidden;
+            background: #020912;
             font-family: 'Courier New', monospace;
-            color: #00ff00;
+            color: #00ff88;
+            user-select: none;
         }
 
-        /* ═══ MAIN UI PANELS ═══ */
-        #ui-overlay {
+        #game-container canvas { display: block; }
+
+        /* ── TOP HUD ── */
+        #top-hud {
             position: fixed;
-            top: 10px;
-            left: 10px;
-            background: rgba(0,0,0,0.9);
-            color: #00ff00;
-            padding: 15px;
-            border: 3px solid #00ff00;
-            font-size: 12px;
-            z-index: 1000;
-            max-width: 320px;
-            border-radius: 8px;
-            box-shadow: 0 0 15px rgba(0,255,0,0.3);
+            top: 0; left: 0; right: 0;
+            height: 52px;
+            background: rgba(2,9,18,0.96);
+            border-bottom: 1px solid rgba(0,255,136,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 10px;
+            z-index: 100;
+            backdrop-filter: blur(6px);
         }
 
-        #player-info {
-            position: fixed;
-            top: 10px;
-            right: 10px;
-            background: rgba(0,0,0,0.9);
-            color: #00ff00;
-            padding: 15px;
-            border: 3px solid #00ff00;
-            font-size: 12px;
-            z-index: 1000;
-            border-radius: 8px;
-            max-width: 300px;
-            box-shadow: 0 0 15px rgba(0,255,0,0.3);
+        #top-hud .title {
+            font-size: 13px;
+            font-weight: bold;
+            color: #00ff88;
+            letter-spacing: 2px;
+            text-shadow: 0 0 10px rgba(0,255,136,0.6);
         }
 
-        #alerts-panel {
+        #view-badge {
+            font-size: 10px;
+            padding: 3px 8px;
+            border-radius: 10px;
+            border: 1px solid currentColor;
+            color: #ffaa00;
+            letter-spacing: 1px;
+            transition: all 0.3s;
+        }
+
+        #zoom-display {
+            font-size: 10px;
+            color: rgba(0,255,136,0.6);
+        }
+
+        /* ── BOTTOM PANEL ── */
+        #bottom-panel {
             position: fixed;
-            top: 10px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(20,0,0,0.95);
-            border: 2px solid #ff4444;
-            padding: 10px 15px;
-            border-radius: 8px;
-            max-width: 500px;
-            z-index: 2000;
-            max-height: 150px;
+            bottom: 0; left: 0; right: 0;
+            background: rgba(2,9,18,0.97);
+            border-top: 1px solid rgba(0,255,136,0.25);
+            z-index: 100;
+            transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
+            backdrop-filter: blur(8px);
+        }
+
+        #panel-handle {
+            width: 40px; height: 4px;
+            background: rgba(0,255,136,0.3);
+            border-radius: 2px;
+            margin: 8px auto 6px;
+            cursor: pointer;
+        }
+
+        #panel-tabs {
+            display: flex;
+            border-bottom: 1px solid rgba(0,255,136,0.15);
+        }
+
+        .panel-tab {
+            flex: 1;
+            padding: 8px 4px;
+            font-size: 10px;
+            text-align: center;
+            cursor: pointer;
+            color: rgba(0,255,136,0.4);
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+            letter-spacing: 1px;
+        }
+
+        .panel-tab.active {
+            color: #00ff88;
+            border-bottom-color: #00ff88;
+        }
+
+        #panel-content {
+            padding: 10px;
+            max-height: 180px;
             overflow-y: auto;
-            box-shadow: 0 0 20px rgba(255,68,68,0.4);
+            font-size: 11px;
+            line-height: 1.6;
+        }
+
+        #panel-content::-webkit-scrollbar { width: 3px; }
+        #panel-content::-webkit-scrollbar-thumb { background: #00ff88; border-radius: 2px; }
+
+        /* ── SECTOR POPUP ── */
+        #sector-popup {
+            position: fixed;
+            left: 50%; top: 50%;
+            transform: translate(-50%, -50%) scale(0.9);
+            width: min(340px, 90vw);
+            background: rgba(4,14,26,0.98);
+            border: 1px solid rgba(0,255,136,0.4);
+            border-radius: 14px;
+            padding: 18px;
+            z-index: 200;
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.25s cubic-bezier(0.34,1.56,0.64,1);
+            box-shadow: 0 0 40px rgba(0,255,136,0.15), 0 20px 60px rgba(0,0,0,0.8);
+        }
+
+        #sector-popup.visible {
+            opacity: 1;
+            pointer-events: all;
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        #sector-popup h3 {
+            font-size: 14px;
+            margin-bottom: 10px;
+            color: #ffaa00;
+            letter-spacing: 2px;
+            border-bottom: 1px solid rgba(255,170,0,0.3);
+            padding-bottom: 8px;
+        }
+
+        .popup-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 4px 0;
+            font-size: 11px;
+            border-bottom: 1px solid rgba(0,255,136,0.06);
+        }
+
+        .popup-row .key { color: rgba(0,255,136,0.5); }
+        .popup-row .val { color: #00ff88; font-weight: bold; }
+
+        .resource-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin: 10px 0;
+        }
+
+        .resource-chip {
+            padding: 3px 8px;
+            border-radius: 8px;
+            font-size: 10px;
+            border: 1px solid;
+        }
+
+        .popup-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .popup-btn {
+            flex: 1;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 11px;
+            font-family: 'Courier New', monospace;
+            cursor: pointer;
+            border: 1px solid;
+            letter-spacing: 1px;
+            transition: all 0.2s;
+            background: transparent;
+        }
+
+        .popup-btn:active { transform: scale(0.96); }
+
+        .popup-btn.enter {
+            color: #00ff88;
+            border-color: #00ff88;
+            background: rgba(0,255,136,0.1);
+        }
+
+        .popup-btn.close {
+            color: rgba(255,255,255,0.4);
+            border-color: rgba(255,255,255,0.15);
+        }
+
+        /* ── LAND VIEW OVERLAY ── */
+        #land-back-btn {
+            position: fixed;
+            top: 62px; left: 10px;
+            background: rgba(4,14,26,0.95);
+            border: 1px solid rgba(0,255,136,0.4);
+            color: #00ff88;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 11px;
+            font-family: 'Courier New', monospace;
+            cursor: pointer;
+            z-index: 150;
+            display: none;
+            letter-spacing: 1px;
+            transition: all 0.2s;
+        }
+
+        #land-back-btn:active { transform: scale(0.96); }
+
+        #land-sector-label {
+            position: fixed;
+            top: 62px; right: 10px;
+            background: rgba(4,14,26,0.95);
+            border: 1px solid rgba(255,170,0,0.4);
+            color: #ffaa00;
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 10px;
+            font-family: 'Courier New', monospace;
+            z-index: 150;
+            display: none;
+            letter-spacing: 1px;
+        }
+
+        /* ── ALERTS ── */
+        #alerts-stack {
+            position: fixed;
+            top: 58px; left: 50%;
+            transform: translateX(-50%);
+            z-index: 300;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            pointer-events: none;
+            width: min(300px, 85vw);
+        }
+
+        .alert-toast {
+            background: rgba(10,20,10,0.95);
+            border: 1px solid rgba(0,255,136,0.4);
+            border-left: 3px solid #00ff88;
+            padding: 7px 12px;
+            border-radius: 6px;
+            font-size: 10px;
+            animation: toastIn 0.3s ease-out forwards;
+            letter-spacing: 0.5px;
+        }
+
+        .alert-toast.danger { border-left-color: #ff4444; border-color: rgba(255,68,68,0.4); }
+
+        @keyframes toastIn {
+            from { opacity: 0; transform: translateY(-8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes toastOut {
+            from { opacity: 1; }
+            to { opacity: 0; transform: translateY(-6px); }
+        }
+
+        /* ── OVERLAY DIMMER ── */
+        #dimmer {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 190;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.25s;
+        }
+
+        #dimmer.visible {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        /* ── PLAYER BADGE ── */
+        #player-badge {
+            position: fixed;
+            top: 62px; left: 10px;
+            background: rgba(4,14,26,0.95);
+            border: 1px solid rgba(0,255,136,0.25);
+            border-radius: 10px;
+            padding: 8px 10px;
+            z-index: 100;
+            font-size: 10px;
+            line-height: 1.8;
+            max-width: 160px;
             display: none;
         }
 
-        .alert-item {
-            padding: 8px;
-            margin: 5px 0;
-            background: rgba(255,68,68,0.2);
-            border-left: 3px solid #ff4444;
-            animation: slideIn 0.3s ease-out;
-        }
-
-        #sector-info {
-            position: fixed;
-            bottom: 10px;
-            left: 10px;
-            background: rgba(0,0,0,0.9);
-            color: #00ff00;
-            padding: 15px;
-            border: 3px solid #00ff00;
-            font-size: 11px;
-            z-index: 1000;
-            max-width: 400px;
-            border-radius: 8px;
-            max-height: 350px;
-            overflow-y: auto;
-            box-shadow: 0 0 15px rgba(0,255,0,0.3);
-        }
-
-        #action-panel {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background: rgba(0,0,0,0.9);
-            border: 2px solid #ffaa00;
-            padding: 15px;
-            border-radius: 8px;
-            z-index: 999;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            box-shadow: 0 0 15px rgba(255,170,0,0.3);
-        }
-
-        .action-btn {
-            background: rgba(255,170,0,0.2);
-            border: 1px solid #ffaa00;
+        #player-badge .pname {
             color: #ffaa00;
-            padding: 8px 12px;
-            cursor: pointer;
-            border-radius: 4px;
+            font-weight: bold;
             font-size: 11px;
-            font-family: 'Courier New', monospace;
-            transition: all 0.2s;
-            white-space: nowrap;
         }
 
-        .action-btn:hover {
-            background: rgba(255,170,0,0.5);
-            box-shadow: 0 0 10px rgba(255,170,0,0.6);
-            transform: scale(1.05);
+        .res-bar {
+            display: flex;
+            gap: 6px;
+            margin-top: 4px;
+            flex-wrap: wrap;
         }
 
-        /* ═══ ANIMATIONS ═══ */
-        @keyframes pulse {
-            0% { box-shadow: 0 0 10px currentColor; }
-            50% { box-shadow: 0 0 20px currentColor, 0 0 40px currentColor; }
-            100% { box-shadow: 0 0 10px currentColor; }
+        .res-item {
+            font-size: 9px;
+            padding: 2px 5px;
+            background: rgba(0,255,136,0.08);
+            border-radius: 4px;
+            color: #00ff88;
         }
-
-        @keyframes slideIn {
-            from {
-                transform: translateY(-20px);
-                opacity: 0;
-            }
-            to {
-                transform: translateY(0);
-                opacity: 1;
-            }
-        }
-
-        @keyframes bounce {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-10px); }
-        }
-
-        @keyframes glow {
-            0% { text-shadow: 0 0 5px; }
-            50% { text-shadow: 0 0 20px; }
-            100% { text-shadow: 0 0 5px; }
-        }
-
-        .pulse-animation {
-            animation: pulse 2s infinite;
-        }
-
-        .danger { color: #ff4444; animation: glow 1s infinite; }
-        .warning { color: #ffaa00; }
-        .success { color: #00ff00; }
-
-        .text-small { font-size: 10px; }
-        .text-bold { font-weight: bold; }
-
-        /* ═══ LOADING SPINNER ═══ */
-        .spinner {
-            display: inline-block;
-            width: 8px;
-            height: 8px;
-            background: #00ff00;
-            border-radius: 50%;
-            animation: bounce 1s infinite;
-        }
-
-        /* ═══ SCROLLBAR ═══ */
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: rgba(0,255,0,0.1); }
-        ::-webkit-scrollbar-thumb { background: #00ff00; border-radius: 3px; }
     </style>
 </head>
 <body>
-    <!-- Main Game Canvas -->
-    <div id="game-container"></div>
 
-    <!-- HUD Panels -->
-    <div id="ui-overlay">
-        <div><strong>🗺️ SECTOR MAP - THE SIXTY4</strong></div>
-        <div id="zoom-level" class="text-small">Zoom: 5%</div>
-        <div id="coordinates" class="text-small">Pos: (4000, 4000)</div>
-        <div id="connection-status" class="warning"><span class="spinner"></span> Connecting...</div>
-        <div id="game-stats" style="margin-top: 10px; font-size: 11px; border-top: 1px solid #00ff00; padding-top: 8px;">
-            <div>⚔️ Threats: <span id="threat-count">0</span></div>
-            <div>🚀 Raids Possible: <span id="raid-count">0</span></div>
-            <div>💎 Resources: <span id="nearby-resources">0</span></div>
+<div id="game-container"></div>
+
+<!-- TOP HUD -->
+<div id="top-hud">
+    <div class="title">⬡ THE SIXTY4</div>
+    <div id="view-badge">GOD VIEW</div>
+    <div id="zoom-display">5%</div>
+</div>
+
+<!-- PLAYER BADGE (shown in god view) -->
+<div id="player-badge">
+    <div class="pname" id="pb-name">Player</div>
+    <div id="pb-sector">Sector --</div>
+    <div id="pb-level">Level --</div>
+    <div class="res-bar" id="pb-res"></div>
+</div>
+
+<!-- ALERTS -->
+<div id="alerts-stack"></div>
+
+<!-- LAND VIEW BACK BUTTON -->
+<button id="land-back-btn">← WORLD MAP</button>
+<div id="land-sector-label"></div>
+
+<!-- SECTOR POPUP -->
+<div id="dimmer"></div>
+<div id="sector-popup">
+    <h3 id="popup-title">SECTOR 1</h3>
+    <div id="popup-body"></div>
+    <div class="popup-actions">
+        <button class="popup-btn enter" id="popup-enter-btn">⬡ ENTER SECTOR</button>
+        <button class="popup-btn close" id="popup-close-btn">✕ CLOSE</button>
+    </div>
+</div>
+
+<!-- BOTTOM PANEL -->
+<div id="bottom-panel">
+    <div id="panel-handle"></div>
+    <div id="panel-tabs">
+        <div class="panel-tab active" data-tab="sector">SECTOR</div>
+        <div class="panel-tab" data-tab="player">PLAYER</div>
+        <div class="panel-tab" data-tab="actions">ACTIONS</div>
+    </div>
+    <div id="panel-content">
+        <div id="tab-sector">Click on any sector to view its details.</div>
+        <div id="tab-player" style="display:none">Loading player data...</div>
+        <div id="tab-actions" style="display:none">
+            <div style="display:flex;flex-wrap:wrap;gap:6px;padding:4px 0">
+                <button class="action-btn-small" id="btn-raid">💥 Raid</button>
+                <button class="action-btn-small" id="btn-scout">🔍 Scout</button>
+                <button class="action-btn-small" id="btn-teleport">⚡ Teleport</button>
+                <button class="action-btn-small" id="btn-weapon">🔫 Weapon</button>
+                <button class="action-btn-small" id="btn-help">❓ Help</button>
+            </div>
         </div>
     </div>
-    
-    <div id="player-info">
-        <div id="player-name" class="text-bold">Loading...</div>
-        <div id="player-sector">Sector: --</div>
-        <div id="player-base">Base: --</div>
-        <div id="player-resources">Resources: --</div>
-        <div id="player-defense" style="margin-top: 8px; color: #ffaa00;">Defense: --</div>
-        <hr style="border: 1px solid #00ff00; margin: 8px 0;">
-        <div id="player-location-btn" style="cursor: pointer; padding: 8px; background: #1a3a2a; border: 1px solid #00ff00; border-radius: 3px; text-align: center; margin: 8px 0; transition: all 0.2s; user-select: none;">
-            📍 YOUR LOCATION
-        </div>
-        <div id="player-location-btn:hover" style="background: #2a5a4a;"></div>
-        <div id="location-details" style="font-size: 10px; margin-top: 8px; display: none; color: #ffaa00; border-top: 1px solid #00ff00; padding-top: 8px;">
-            <!-- Location info -->
-        </div>
-    </div>
+</div>
 
-    <div id="alerts-panel">
-        <strong style="color: #ff6666;">⚠️ ALERTS</strong>
-        <div id="alerts-list"></div>
-    </div>
+<style>
+.action-btn-small {
+    padding: 7px 10px;
+    background: rgba(255,170,0,0.1);
+    border: 1px solid rgba(255,170,0,0.5);
+    color: #ffaa00;
+    border-radius: 6px;
+    font-size: 10px;
+    font-family: 'Courier New', monospace;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    transition: all 0.15s;
+}
+.action-btn-small:active { transform: scale(0.94); background: rgba(255,170,0,0.25); }
+</style>
 
-    <div id="sector-info">
-        <div><strong>📍 SECTOR INFO</strong></div>
-        <div id="sector-details" style="margin-top: 8px;">Click on a sector to view details</div>
-    </div>
+<script>
+// ══════════════════════════════════════════════
+//  THE SIXTY4 — WORLD MAP
+//  Views: GOD → COMMANDER (sector zoom) → LAND
+// ══════════════════════════════════════════════
 
-    <div id="action-panel">
-        <button class="action-btn" id="btn-use-weapon">🔫 Use Weapon</button>
-        <button class="action-btn" id="btn-raid-sector">💥 Raid Sector</button>
-        <button class="action-btn" id="btn-scout">🔍 Scout</button>
-        <button class="action-btn" id="btn-teleport">⚡ Teleport</button>
-        <button class="action-btn" id="btn-help">❓ Help</button>
-    </div>
+const SECTOR_SIZE = 2000;
+const GRID = 8; // 8x8 = 64 sectors
+const TILE = 80;
 
-    <script>
-        // ════════════════════════════════════════════════════════════════════
-        // THE SIXTY4 - WORLD MAP SYSTEM - EXTREMELY ADDICTIVE EDITION
-        // ════════════════════════════════════════════════════════════════════
-        
-        // ──── GLOBAL STATE ────
-        let gameState = {
-            userId: null,
-            currentSector: null,
-            playerData: null,
-            allSectors: {},
-            baseLocations: {},
-            selectedSector: null,
-            threats: [],
-            alerts: [],
-            selectedTarget: null,
-            sceneReady: false
-        };
-        
-        let lastUpdate = 0;
-        const UPDATE_INTERVAL = 3000;  // Sync every 3 seconds (faster!)
-        let gameScene = null;
+let gameState = {
+    view: 'god',           // god | land
+    selectedSector: null,
+    playerData: null,
+    baseLocations: {},
+    threats: [],
+    userId: null,
+    allSectors: {}
+};
 
-        // ──── UTILITY FUNCTIONS ────
-        function addAlert(msg, type = 'warning') {
-            gameState.alerts.unshift({ msg, type, time: Date.now() });
-            if (gameState.alerts.length > 10) gameState.alerts.pop();
-            updateAlertsDisplay();
-        }
+let gameScene = null;
+let godCam = null;
 
-        function updateAlertsDisplay() {
-            const panel = document.getElementById('alerts-panel');
-            const list = document.getElementById('alerts-list');
-            
-            if (gameState.alerts.length === 0) {
-                panel.style.display = 'none';
-                return;
+// ── SECTOR BIOMES (each sector has a theme) ──
+const BIOMES = [
+    { name:'Ashlands',   bg:0x1a0808, tile1:0x3d1010, tile2:0x4a1515, accent:0xff4422, res:['Iron','Coal','Ash'] },
+    { name:'Ironwaste',  bg:0x0d1520, tile1:0x1a2535, tile2:0x1f2e40, accent:0x6688aa, res:['Iron','Steel','Ore'] },
+    { name:'Greenfield', bg:0x081508, tile1:0x123018, tile2:0x163a1c, accent:0x44ff66, res:['Wood','Food','Herbs'] },
+    { name:'Crystalfen', bg:0x0a0820, tile1:0x180f3a, tile2:0x1e1248, accent:0xaa66ff, res:['Crystal','Gems','Magic'] },
+    { name:'Sandvast',   bg:0x1a1408, tile1:0x3a2c10, tile2:0x453515, accent:0xffcc44, res:['Gold','Sand','Spice'] },
+    { name:'Frostreach', bg:0x0a1420, tile1:0x142035, tile2:0x1a2a44, accent:0x88ddff, res:['Ice','Frost','Silver'] },
+    { name:'Deadmarsh',  bg:0x0f1008, tile1:0x1e2210, tile2:0x252a14, accent:0x88aa22, res:['Bone','Fungus','Rot'] },
+    { name:'Volcania',   bg:0x1a0800, tile1:0x3a1000, tile2:0x4a1400, accent:0xff6600, res:['Obsidian','Fire','Sulfur'] },
+];
+
+// Resource visual configs
+const RES_STYLES = {
+    Iron:    { color:0x8899aa, symbol:'⬡', size:10 },
+    Coal:    { color:0x333344, symbol:'●', size:10 },
+    Ash:     { color:0xaaaaaa, symbol:'∘', size:8  },
+    Steel:   { color:0x7799bb, symbol:'◆', size:11 },
+    Ore:     { color:0x996644, symbol:'◈', size:10 },
+    Wood:    { color:0x885522, symbol:'✦', size:11 },
+    Food:    { color:0x66bb44, symbol:'◉', size:10 },
+    Herbs:   { color:0x44dd66, symbol:'✿', size:9  },
+    Crystal: { color:0xcc88ff, symbol:'◇', size:12 },
+    Gems:    { color:0xff88cc, symbol:'◆', size:10 },
+    Magic:   { color:0xaa66ff, symbol:'★', size:11 },
+    Gold:    { color:0xffcc00, symbol:'◎', size:11 },
+    Sand:    { color:0xddcc88, symbol:'∴', size:8  },
+    Spice:   { color:0xff9944, symbol:'✸', size:9  },
+    Ice:     { color:0xbbeeFF, symbol:'❄', size:10 },
+    Frost:   { color:0x88ccff, symbol:'∗', size:9  },
+    Silver:  { color:0xddddee, symbol:'◎', size:10 },
+    Bone:    { color:0xddccaa, symbol:'✝', size:10 },
+    Fungus:  { color:0x88aa22, symbol:'⬤', size:9  },
+    Rot:     { color:0x667733, symbol:'◍', size:8  },
+    Obsidian:{ color:0x222233, symbol:'◼', size:12 },
+    Fire:    { color:0xff4400, symbol:'▲', size:11 },
+    Sulfur:  { color:0xddaa00, symbol:'⬟', size:9  },
+};
+
+function getBiome(sectorNum) {
+    return BIOMES[(sectorNum - 1) % BIOMES.length];
+}
+
+// ── TOAST ALERTS ──
+function toast(msg, type = '') {
+    const stack = document.getElementById('alerts-stack');
+    const el = document.createElement('div');
+    el.className = 'alert-toast' + (type ? ' ' + type : '');
+    el.textContent = msg;
+    stack.appendChild(el);
+    setTimeout(() => {
+        el.style.animation = 'toastOut 0.3s forwards';
+        setTimeout(() => el.remove(), 300);
+    }, 2500);
+    while (stack.children.length > 4) stack.removeChild(stack.firstChild);
+}
+
+// ── MOCK DATA ──
+function getMockPlayer() {
+    return {
+        user_id: gameState.userId,
+        username: 'Cmdr_' + (gameState.userId || '').slice(-4).toUpperCase(),
+        sector: Math.floor(Math.random() * 64) + 1,
+        level: Math.floor(Math.random() * 20) + 3,
+        base_name: 'Fortress Prime',
+        war_points: Math.floor(Math.random() * 8000) + 500,
+        defense: Math.floor(Math.random() * 250) + 80,
+        base_resources: {
+            resources: {
+                wood: Math.floor(Math.random() * 600) + 100,
+                iron: Math.floor(Math.random() * 300) + 50,
+                gold: Math.floor(Math.random() * 200) + 20
             }
-            
-            panel.style.display = 'block';
-            list.innerHTML = '';
-            
-            gameState.alerts.slice(0, 5).forEach(alert => {
-                const div = document.createElement('div');
-                div.className = 'alert-item';
-                div.textContent = alert.msg;
-                list.appendChild(div);
+        }
+    };
+}
+
+function getMockBases() {
+    const names = ['Shadow Hold','Obsidian Peak','Iron Fortress','Crystal Spire','Ember Throne','Frost Keep','Ash Citadel','Gold Bastion'];
+    return Array.from({ length: 25 }, (_, i) => ({
+        user_id: `player_${i}`,
+        username: `Player${i}`,
+        sector: Math.floor(Math.random() * 64) + 1,
+        base_name: names[i % names.length],
+        level: Math.floor(Math.random() * 28) + 1,
+        war_points: Math.floor(Math.random() * 9000) + 100,
+        defense: Math.floor(Math.random() * 280)
+    }));
+}
+
+// ── INIT ──
+function init() {
+    const params = new URLSearchParams(location.search);
+    gameState.userId = params.get('user_id') || localStorage.getItem('user_id') || 'demo_' + Math.random().toString(36).slice(2,8);
+    localStorage.setItem('user_id', gameState.userId);
+
+    gameState.playerData = getMockPlayer();
+    const bases = getMockBases();
+    bases.forEach(b => {
+        gameState.baseLocations[b.user_id] = b;
+        if (b.sector === gameState.playerData.sector && b.user_id !== gameState.userId) {
+            if (b.level > gameState.playerData.level) gameState.threats.push(b);
+        }
+    });
+
+    updatePlayerBadge();
+    setupTabs();
+    setupActions();
+    toast('✅ Map loaded — tap any sector');
+}
+
+function updatePlayerBadge() {
+    const p = gameState.playerData;
+    if (!p) return;
+    document.getElementById('pb-name').textContent = '👤 ' + p.username;
+    document.getElementById('pb-sector').textContent = 'Sector ' + p.sector;
+    document.getElementById('pb-level').textContent = 'LV ' + p.level + ' · ⚔️ ' + p.war_points + 'pts';
+    const res = p.base_resources?.resources || {};
+    document.getElementById('pb-res').innerHTML =
+        Object.entries(res).map(([k,v]) => `<span class="res-item">${k[0].toUpperCase()+k.slice(1)}: ${v}</span>`).join('');
+    document.getElementById('player-badge').style.display = 'block';
+}
+
+// ── BOTTOM PANEL TABS ──
+let activeTab = 'sector';
+function setupTabs() {
+    document.querySelectorAll('.panel-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            activeTab = tab.dataset.tab;
+            document.querySelectorAll('.panel-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            ['sector','player','actions'].forEach(id => {
+                document.getElementById('tab-' + id).style.display = id === activeTab ? 'block' : 'none';
             });
-        }
+            if (activeTab === 'player') updatePlayerTab();
+        });
+    });
+}
 
-        // ──── INITIALIZE USER ────
-        function initializeUser() {
-            const params = new URLSearchParams(window.location.search);
-            gameState.userId = params.get('user_id') || localStorage.getItem('user_id');
-            
-            if (gameState.userId) {
-                console.log('✅ User initialized:', gameState.userId);
-                localStorage.setItem('user_id', gameState.userId);
-                updateConnectionStatus('success', '✅ Initializing...');
-                setupActionButtons();
-                return true;
-            } else {
-                console.warn('⚠️ No user_id provided - using demo mode');
-                gameState.userId = 'demo_' + Math.random().toString(36).substr(2, 9);
-                localStorage.setItem('user_id', gameState.userId);
-                updateConnectionStatus('warning', '⚠️ Demo Mode');
-                setupActionButtons();
-                return true;
+function updatePlayerTab() {
+    const p = gameState.playerData;
+    if (!p) return;
+    const res = p.base_resources?.resources || {};
+    document.getElementById('tab-player').innerHTML =
+        `<b style="color:#ffaa00">${p.username}</b> — Level ${p.level}<br>` +
+        `🏰 ${p.base_name} · Sector ${p.sector}<br>` +
+        `⚔️ ${p.war_points} war points · 🛡️ ${p.defense} defense<br>` +
+        `<br><b>Resources:</b> ` +
+        Object.entries(res).map(([k,v]) => `${k}: <b>${v}</b>`).join(' · ');
+}
+
+function updateSectorTab(sNum) {
+    const biome = getBiome(sNum);
+    const bases = Object.values(gameState.baseLocations).filter(b => b.sector === sNum);
+    const isHome = gameState.playerData?.sector === sNum;
+    let html = `<b style="color:#ffaa00">Sector ${sNum} — ${biome.name}</b><br>`;
+    html += `Resources: <span style="color:#aaa">${biome.res.join(', ')}</span><br>`;
+    if (isHome) html += `<span style="color:#ff88ff">⭐ YOUR BASE IS HERE</span><br>`;
+    if (bases.length) {
+        html += `<br>🏰 ${bases.length} base(s) detected:<br>`;
+        bases.slice(0,5).forEach(b => {
+            const threat = b.level > (gameState.playerData?.level || 1);
+            html += `${threat ? '🔴' : '🟢'} ${b.base_name} (LV${b.level})<br>`;
+        });
+    } else {
+        html += `<br>🏜️ No rival bases — sector clear.`;
+    }
+    document.getElementById('tab-sector').innerHTML = html;
+}
+
+// ── ACTION BUTTONS ──
+function setupActions() {
+    document.getElementById('btn-raid').onclick = () => {
+        if (!gameState.selectedSector) { toast('⚠️ Select a sector first'); return; }
+        toast(`💥 Raid initiated on Sector ${gameState.selectedSector}`);
+    };
+    document.getElementById('btn-scout').onclick = () => {
+        if (!gameState.selectedSector) { toast('⚠️ Select a sector first'); return; }
+        toast(`🔍 Scouting Sector ${gameState.selectedSector}...`);
+    };
+    document.getElementById('btn-teleport').onclick = () => {
+        if (!gameState.selectedSector) { toast('⚠️ Select a sector first'); return; }
+        toast(`⚡ Teleporting to Sector ${gameState.selectedSector}`);
+    };
+    document.getElementById('btn-weapon').onclick = () => toast('🔫 Use /use_weapon in Telegram');
+    document.getElementById('btn-help').onclick = () => toast('💡 Tap sector → Enter → explore land view');
+}
+
+// ── SECTOR POPUP ──
+function showSectorPopup(sNum) {
+    gameState.selectedSector = sNum;
+    const biome = getBiome(sNum);
+    const bases = Object.values(gameState.baseLocations).filter(b => b.sector === sNum);
+    const isHome = gameState.playerData?.sector === sNum;
+
+    document.getElementById('popup-title').textContent = `SECTOR ${sNum} — ${biome.name.toUpperCase()}`;
+
+    let html = '';
+    html += `<div class="popup-row"><span class="key">Biome</span><span class="val">${biome.name}</span></div>`;
+    html += `<div class="popup-row"><span class="key">Bases</span><span class="val">${bases.length}</span></div>`;
+    html += `<div class="popup-row"><span class="key">Threats</span><span class="val" style="color:${gameState.threats.filter(t=>t.sector===sNum).length > 0 ? '#ff4444' : '#00ff88'}">${gameState.threats.filter(t=>t.sector===sNum).length}</span></div>`;
+    if (isHome) html += `<div class="popup-row"><span class="key">Status</span><span class="val" style="color:#ff88ff">⭐ HOME BASE</span></div>`;
+
+    html += `<div class="resource-chips">`;
+    biome.res.forEach(r => {
+        const s = RES_STYLES[r] || { color:0x888888 };
+        const hex = '#' + s.color.toString(16).padStart(6,'0');
+        html += `<span class="resource-chip" style="color:${hex};border-color:${hex}40;background:${hex}12">${r}</span>`;
+    });
+    html += `</div>`;
+
+    document.getElementById('popup-body').innerHTML = html;
+    document.getElementById('sector-popup').classList.add('visible');
+    document.getElementById('dimmer').classList.add('visible');
+
+    updateSectorTab(sNum);
+}
+
+function hideSectorPopup() {
+    document.getElementById('sector-popup').classList.remove('visible');
+    document.getElementById('dimmer').classList.remove('visible');
+}
+
+document.getElementById('popup-close-btn').addEventListener('click', hideSectorPopup);
+document.getElementById('dimmer').addEventListener('click', hideSectorPopup);
+document.getElementById('popup-enter-btn').addEventListener('click', () => {
+    const sNum = gameState.selectedSector;
+    hideSectorPopup();
+    if (sNum) enterLandView(sNum);
+});
+
+// ── LAND VIEW MANAGEMENT ──
+let landScene = null;
+
+function enterLandView(sNum) {
+    gameState.view = 'land';
+    document.getElementById('view-badge').textContent = 'LAND VIEW';
+    document.getElementById('view-badge').style.color = '#44aaff';
+    document.getElementById('land-back-btn').style.display = 'block';
+    document.getElementById('land-sector-label').style.display = 'block';
+    document.getElementById('land-sector-label').textContent = `SECTOR ${sNum} · ${getBiome(sNum).name}`;
+    document.getElementById('player-badge').style.display = 'none';
+
+    // Switch Phaser scenes
+    gameScene.scene.switch('LandScene', { sectorNum: sNum });
+}
+
+function exitLandView() {
+    gameState.view = 'god';
+    document.getElementById('view-badge').textContent = 'GOD VIEW';
+    document.getElementById('view-badge').style.color = '#ffaa00';
+    document.getElementById('land-back-btn').style.display = 'none';
+    document.getElementById('land-sector-label').style.display = 'none';
+    document.getElementById('player-badge').style.display = 'block';
+    gameScene.scene.switch('WorldScene');
+    toast(`↩ Back to world map`);
+}
+
+document.getElementById('land-back-btn').addEventListener('click', exitLandView);
+
+// ══════════════════════════════════════════════
+//  PHASER — WORLD SCENE (God / Commander View)
+// ══════════════════════════════════════════════
+
+class WorldScene extends Phaser.Scene {
+    constructor() { super({ key: 'WorldScene' }); }
+
+    preload() {
+        // Generate ground textures via canvas
+        this.generateTextures();
+    }
+
+    generateTextures() {
+        BIOMES.forEach((biome, i) => {
+            const key = 'ground_' + i;
+            const size = 32;
+            const c = document.createElement('canvas');
+            c.width = size; c.height = size;
+            const ctx = c.getContext('2d');
+            // Base color
+            ctx.fillStyle = '#' + biome.tile1.toString(16).padStart(6,'0');
+            ctx.fillRect(0,0,size,size);
+            // Noise overlay
+            ctx.fillStyle = '#' + biome.tile2.toString(16).padStart(6,'0');
+            for (let t = 0; t < 12; t++) {
+                ctx.fillRect(
+                    Math.random()*size | 0, Math.random()*size | 0,
+                    (Math.random()*8+2) | 0, (Math.random()*8+2) | 0
+                );
+            }
+            this.textures.addCanvas(key, c);
+        });
+    }
+
+    create() {
+        gameScene = this;
+        init();
+
+        const worldW = SECTOR_SIZE * GRID;
+        const worldH = SECTOR_SIZE * GRID;
+
+        godCam = this.cameras.main;
+        godCam.setBounds(0, 0, worldW, worldH);
+        godCam.setZoom(0.05);
+        godCam.centerOn(worldW/2, worldH/2);
+
+        this.buildWorld();
+        this.setupInput();
+        this.lastPinchDist = 0;
+        this.isDragging = false;
+        this.dragStart = { x:0, y:0, cx:0, cy:0 };
+    }
+
+    buildWorld() {
+        for (let gx = 0; gx < GRID; gx++) {
+            for (let gy = 0; gy < GRID; gy++) {
+                const sNum = gx * GRID + gy + 1;
+                const posX = gx * SECTOR_SIZE;
+                const posY = gy * SECTOR_SIZE;
+                const biome = getBiome(sNum);
+                const biomeIdx = (sNum - 1) % BIOMES.length;
+
+                gameState.allSectors[sNum] = { x: posX+1000, y: posY+1000, gx, gy };
+
+                const cont = this.add.container(posX, posY);
+
+                // Sector BG
+                const bg = this.add.rectangle(1000, 1000, 1980, 1980, biome.bg)
+                    .setStrokeStyle(3, biome.accent, 0.4);
+                cont.add(bg);
+
+                // Sector number watermark
+                const lbl = this.add.text(1000, 1000, sNum.toString(), {
+                    font: 'bold 350px Arial',
+                    color: '#' + biome.accent.toString(16).padStart(6,'0')
+                }).setOrigin(0.5).setAlpha(0.06);
+                cont.add(lbl);
+
+                // Biome name small label
+                const bname = this.add.text(1000, 200, biome.name.toUpperCase(), {
+                    font: '80px Courier New',
+                    color: '#' + biome.accent.toString(16).padStart(6,'0')
+                }).setOrigin(0.5).setAlpha(0.35);
+                cont.add(bname);
+
+                // Resources dots
+                this.spawnResourceDots(cont, biome, sNum);
+
+                // Bases
+                this.spawnBases(cont, sNum, biome);
+
+                // Player home marker
+                if (gameState.playerData?.sector === sNum) {
+                    const pRing = this.add.circle(1000, 1200, 220, 0xff88ff, 0.08)
+                        .setStrokeStyle(6, 0xff88ff, 0.7);
+                    const pDot = this.add.circle(1000, 1200, 80, 0xff88ff, 0.5);
+                    const pTxt = this.add.text(1000, 1400, '⭐ HOME', {
+                        font: 'bold 70px Arial', color: '#ff88ff'
+                    }).setOrigin(0.5).setAlpha(0.8);
+                    cont.add([pRing, pDot, pTxt]);
+                    this.tweens.add({ targets: [pRing, pDot], alpha: { from:0.3, to:0.9 }, duration:1800, repeat:-1, yoyo:true });
+                }
+
+                // Hit zone
+                const hit = this.add.rectangle(1000, 1000, 1980, 1980, 0, 0).setInteractive();
+                hit.sectorNum = sNum;
+                hit.on('pointerdown', (ptr, lx, ly, evt) => {
+                    evt.stopPropagation();
+                    if (!this.isDragging) showSectorPopup(sNum);
+                });
+                cont.add(hit);
             }
         }
+    }
 
-        // ──── ACTION BUTTONS ────
-        function setupActionButtons() {
-            const btn = document.getElementById('player-location-btn');
-            if (btn) {
-                btn.addEventListener('click', () => {
-                    const details = document.getElementById('location-details');
-                    if (details.style.display === 'none') {
-                        showLocationDetails();
-                        details.style.display = 'block';
-                        btn.style.background = '#2a5a4a';
-                    } else {
-                        details.style.display = 'none';
-                        btn.style.background = '#1a3a2a';
-                    }
+    spawnResourceDots(cont, biome, sNum) {
+        const rng = this.seededRand(sNum * 97);
+        biome.res.forEach((resName, ri) => {
+            const style = RES_STYLES[resName] || { color: 0x888888, size: 8 };
+            const count = Math.floor(rng() * 6) + 4;
+            for (let i = 0; i < count; i++) {
+                const rx = rng() * 1600 + 200;
+                const ry = rng() * 1600 + 200;
+                const dot = this.add.circle(rx, ry, style.size + 2, style.color, 0.75);
+                cont.add(dot);
+                this.tweens.add({
+                    targets: dot, alpha: { from:0.4, to:0.9 },
+                    scale: { from:0.8, to:1.15 },
+                    duration: 1800 + rng()*1200, repeat:-1, yoyo:true,
+                    delay: rng() * 1000
                 });
             }
-            
-            document.getElementById('btn-use-weapon').onclick = () => {
-                addAlert('🔫 Open Telegram to use weapon: /use_weapon');
-                alert('Open your Telegram Bot and use /use_weapon command to select target');
-            };
+        });
+    }
 
-            document.getElementById('btn-raid-sector').onclick = () => {
-                if (gameState.selectedSector) {
-                    addAlert(`💥 Raiding Sector ${gameState.selectedSector}...`);
-                    alert(`Initiate raid on Sector ${gameState.selectedSector} in Telegram: /raid ${gameState.selectedSector}`);
-                } else {
-                    addAlert('⚠️ Select a sector first!');
-                }
-            };
+    spawnBases(cont, sNum, biome) {
+        const bases = Object.values(gameState.baseLocations).filter(b => b.sector === sNum);
+        bases.slice(0, 6).forEach((base, i) => {
+            const angle = (i / Math.max(bases.length, 1)) * Math.PI * 2;
+            const bx = 1000 + Math.cos(angle) * 600;
+            const by = 1000 + Math.sin(angle) * 600;
+            const isThreat = base.level > (gameState.playerData?.level || 1);
+            const col = isThreat ? 0xff4444 : 0xffdd44;
 
-            document.getElementById('btn-scout').onclick = () => {
-                if (gameState.selectedSector) {
-                    addAlert(`🔍 Scanning Sector ${gameState.selectedSector}...`);
-                    alert(`Scout Sector ${gameState.selectedSector} from Telegram: /scout ${gameState.selectedSector}`);
-                } else {
-                    addAlert('⚠️ Select a sector first!');
-                }
-            };
+            const square = this.add.rectangle(bx, by, 130, 130, col, 0.25)
+                .setStrokeStyle(3, col, 0.8);
+            const lvl = this.add.text(bx, by, `L${base.level}`, {
+                font: 'bold 60px Arial', color: '#' + col.toString(16).padStart(6,'0')
+            }).setOrigin(0.5);
+            cont.add([square, lvl]);
 
-            document.getElementById('btn-teleport').onclick = () => {
-                if (gameState.selectedSector) {
-                    addAlert(`⚡ Teleporting to Sector ${gameState.selectedSector}...`);
-                    alert(`Teleport to Sector ${gameState.selectedSector} from Telegram: /teleport ${gameState.selectedSector}`);
-                } else {
-                    addAlert('⚠️ Select a sector first!');
-                }
-            };
-
-            document.getElementById('btn-help').onclick = () => {
-                alert('🎮 THE SIXTY4 WORLD MAP\n\n' +
-                      '💡 Click sectors to view details\n' +
-                      '🔫 Use weapons from the action panel\n' +
-                      '💥 Raid enemy bases for resources\n' +
-                      '🔍 Scout before attacking\n' +
-                      '⚡ Teleport to new sectors\n' +
-                      '🎯 Strategy: Scout → Plan → Attack → Raid!\n' +
-                      '📊 Higher level = stronger weapons');
-            };
-        }
-
-        function showLocationDetails() {
-            const details = document.getElementById('location-details');
-            if (!gameState.playerData) {
-                details.innerHTML = '⚠️ Location data loading...';
-                return;
+            if (isThreat) {
+                this.tweens.add({ targets: square, alpha:{from:0.2,to:0.6}, duration:900, repeat:-1, yoyo:true });
             }
+        });
+    }
 
-            const pd = gameState.playerData;
-            const sector = pd.sector || '?';
-            const sectorData = gameState.allSectors[sector];
-            
-            let html = `<strong>📍 YOU ARE HERE</strong><br>`;
-            html += `Sector: <strong>${sector}</strong><br>`;
-            if (sectorData) {
-                html += `Grid: (${sectorData.gridX}x${sectorData.gridY})<br>`;
-            }
-            html += `Base: <strong>${pd.base_name || 'Unnamed'}</strong><br>`;
-            html += `Level: <strong>${pd.level}</strong><br>`;
-            
-            if (pd.teleport_available) {
-                html += `<br><strong>⚡ Teleport Available</strong><br>`;
-                html += `Ready to move to another sector`;
-            }
-            
-            details.innerHTML = html;
-        }
+    setupInput() {
+        this.input.on('pointerdown', (ptr) => {
+            if (this.input.pointer2?.isDown) return;
+            this.isDragging = false;
+            this.dragStart = { x: ptr.x, y: ptr.y, cx: godCam.scrollX, cy: godCam.scrollY };
+            this._dragMoved = false;
+        });
 
-        // ──── API CALLS ────
-        async function fetchPlayerData() {
-            if (!gameState.userId) return getMockPlayerData();
-            
-            try {
-                const response = await fetch(`/api/player/${gameState.userId}`);
-                if (response.ok) {
-                    const data = await response.json();
-                    gameState.playerData = data;
-                    gameState.currentSector = data.sector;
-                    return data;
-                }
-            } catch (e) {
-                console.warn('Failed to fetch player data, using mock');
-            }
-            return getMockPlayerData();
-        }
-
-        async function fetchAllBases() {
-            try {
-                const response = await fetch('/api/all_bases');
-                if (response.ok) {
-                    const data = await response.json();
-                    return data.bases || [];
-                }
-            } catch (e) {
-                console.warn('Failed to fetch bases, using mock data');
-            }
-            return getMockBases();
-        }
-
-        // ──── MOCK DATA ────
-        function getMockPlayerData() {
-            return {
-                user_id: gameState.userId,
-                username: `Player_${gameState.userId.slice(-4)}`,
-                sector: Math.floor(Math.random() * 9) + 1,
-                level: Math.floor(Math.random() * 25) + 1,
-                base_name: 'Fortress Alpha',
-                base_resources: {
-                    resources: {
-                        wood: Math.floor(Math.random() * 500),
-                        bronze: Math.floor(Math.random() * 300),
-                        iron: Math.floor(Math.random() * 100)
-                    },
-                    food: Math.floor(Math.random() * 200)
-                },
-                wins: Math.floor(Math.random() * 50),
-                war_points: Math.floor(Math.random() * 5000),
-                defense: Math.floor(Math.random() * 200) + 50
-            };
-        }
-
-        function getMockBases() {
-            const bases = [];
-            const baseNames = ['Obsidian Keep', 'Crystal Spire', 'Iron Fortress', 'Shadow Hold', 'Golden Peak'];
-            
-            for (let i = 0; i < 20; i++) {
-                bases.push({
-                    user_id: `player_${i}`,
-                    username: `Player${i}`,
-                    sector: Math.floor(Math.random() * 64) + 1,
-                    base_name: baseNames[i % baseNames.length],
-                    level: Math.floor(Math.random() * 30) + 1,
-                    war_points: Math.floor(Math.random() * 10000),
-                    defense: Math.floor(Math.random() * 300)
-                });
-            }
-            return bases;
-        }
-
-        // ──── UI UPDATES ────
-        function updateConnectionStatus(status, msg) {
-            const el = document.getElementById('connection-status');
-            el.textContent = msg;
-            el.className = status;
-        }
-
-        function updatePlayerInfo() {
-            if (!gameState.playerData) return;
-            
-            const p = gameState.playerData;
-            const resources = p.base_resources?.resources || {};
-            const totalResources = Object.values(resources).reduce((a, b) => a + b, 0);
-            
-            document.getElementById('player-name').textContent = `👤 ${p.username} (LV${p.level})`;
-            document.getElementById('player-sector').textContent = `📍 Sector: ${p.sector}⚔️ War Points: ${p.war_points}`;
-            document.getElementById('player-base').textContent = `🏰 ${p.base_name || 'Base Not Setup'}`;
-            document.getElementById('player-resources').textContent = 
-                `🪵${resources.wood} 🧱${resources.bronze} ⛓️${resources.iron}`;
-            document.getElementById('player-defense').textContent = `🛡️ Defense: ${p.defense || 100}`;
-            document.getElementById('threat-count').textContent = gameState.threats.length;
-            document.getElementById('nearby-resources').textContent = totalResources;
-        }
-
-        function updateSectorInfo(sectorNum) {
-            const bases = Object.values(gameState.baseLocations).filter(b => b.sector === sectorNum);
-            
-            let info = `📍 **SECTOR ${sectorNum}**\n\n`;
-            
-            if (gameState.playerData && gameState.playerData.sector === sectorNum) {
-                info += `👤 *YOUR BASE IS HERE*\n`;
-                info += `   Base: ${gameState.playerData.base_name}\n`;
-                info += `   Level: ${gameState.playerData.level}\n`;
-                info += `   Defense: ${gameState.playerData.defense || 100}\n\n`;
-            }
-            
-            if (bases.length > 0) {
-                info += `🏰 **ENEMY BASES (${bases.length}):**\n`;
-                bases.slice(0, 8).forEach(b => {
-                    if (gameState.playerData && b.user_id !== gameState.playerData.user_id) {
-                        const threat = b.level > (gameState.playerData?.level || 1) ? '🔴' : '🟢';
-                        info += `${threat} ${b.name} (Lv${b.level}) - ${b.war_points}pts\n`;
-                    }
-                });
-            } else {
-                info += `🏜️ Sector appears empty\n\n`;
-            }
-            
-            info += `\n💡 Click buttons above to interact`;
-            document.getElementById('sector-details').textContent = info;
-        }
-
-        function preload() {}
-
-        function create() {
-            gameScene = this;
-            console.log('🎮 Phaser scene created');
-            
-            if (!initializeUser()) {
-                console.error('Failed to initialize user');
-                return;
-            }
-            
-            console.log('👤 User initialized:', gameState.userId);
-            
-            // Start data fetch immediately (async)
-            fetchDataAndBuildWorld.call(this);
-        }
-
-        function fetchDataAndBuildWorld() {
-            const self = this;
-            console.log('📊 Fetching game data...');
-            
-            // Set timeout to use mock data if API is slow
-            let dataLoadTimeout = setTimeout(() => {
-                if (!gameState.sceneReady) {
-                    console.warn('⏱️ Data fetch timeout - using mock data');
-                    useMockDataToRender.call(self);
-                }
-            }, 3000);
-            
-            Promise.all([fetchPlayerData(), fetchAllBases()]).then(([playerData, bases]) => {
-                clearTimeout(dataLoadTimeout);
-                
-                console.log('✅ Data fetched:', { playerData, bases });
-                
-                if (!playerData) {
-                    console.error('❌ No player data');
-                    updateConnectionStatus('error', '❌ Player data failed');
-                    return;
-                }
-                
-                if (!bases || bases.length === 0) {
-                    console.warn('⚠️ No bases found, using demo');
-                    bases = getMockBases();
-                }
-                
-                // Process bases
-                processBasesData(bases);
-                updatePlayerInfo();
-                buildWorldMap.call(self);
-                startSyncLoop();
-                gameState.sceneReady = true;
-                updateConnectionStatus('success', '✅ Map Ready');
-                addAlert('✅ Map loaded! Click sectors to interact.');
-            }).catch(err => {
-                clearTimeout(dataLoadTimeout);
-                console.error('❌ Data fetch error:', err);
-                updateConnectionStatus('error', '❌ Load failed');
-            });
-        }
-
-        function processBasesData(bases) {
-            bases.forEach(base => {
-                gameState.baseLocations[base.user_id] = {
-                    user_id: base.user_id,
-                    username: base.username,
-                    sector: base.sector,
-                    name: base.base_name,
-                    level: base.level,
-                    war_points: base.war_points,
-                    defense: base.defense || 100
-                };
-                
-                // Detect threats
-                if (gameState.playerData && base.sector === gameState.playerData.sector && 
-                    base.user_id !== gameState.playerData.user_id) {
-                    gameState.threats.push(base);
-                }
-            });
-            console.log('✅ Processed bases:', Object.keys(gameState.baseLocations).length);
-        }
-
-        function useMockDataToRender() {
-            const self = gameScene;
-            console.warn('🎮 Rendering with mock data');
-            
-            if (!gameState.playerData) {
-                gameState.playerData = getMockPlayerData();
-            }
-            
-            const bases = getMockBases();
-            processBasesData(bases);
-            updatePlayerInfo();
-            buildWorldMap.call(self);
-            startSyncLoop();
-            gameState.sceneReady = true;
-            updateConnectionStatus('warning', '⚠️ Demo Mode');
-            addAlert('🎮 Running in demo mode!');
-        }
-
-        function buildWorldMap() {
-            const sectorSize = 2000;
-            const worldSize = sectorSize * 8;
-
-            this.cameras.main.setBounds(0, 0, worldSize, worldSize);
-            this.cameras.main.setZoom(0.05);
-            this.cameras.main.centerOn(worldSize/2, worldSize/2);
-
-            // BUILD WORLD
-            for (let x = 0; x < 8; x++) {
-                for (let y = 0; y < 8; y++) {
-                    let posX = x * sectorSize;
-                    let posY = y * sectorSize;
-                    let sectorNum = x * 8 + y + 1;
-                    
-                    gameState.allSectors[sectorNum] = {
-                        x: posX + 1000,
-                        y: posY + 1000,
-                        gridX: x,
-                        gridY: y
-                    };
-
-                    let container = this.add.container(posX, posY);
-                    
-                    // Sector background
-                    let rect = this.add.rectangle(1000, 1000, 1980, 1980, 0x0a141d)
-                        .setStrokeStyle(4, 0x1a2b3c);
-                    container.add(rect);
-
-                    // Sector number (background)
-                    let label = this.add.text(1000, 1000, sectorNum.toString(), { 
-                        font: 'bold 400px Arial', 
-                        fill: '#ffffff' 
-                    }).setOrigin(0.5).setAlpha(0.08);
-                    container.add(label);
-
-                    // Check if player's sector
-                    const isPlayerSector = gameState.currentSector === sectorNum;
-                    
-                    // Player location indicator
-                    if (isPlayerSector && gameState.playerData) {
-                        let outerPulse = this.add.circle(1000, 1000, 300, 0xff00ff, 0.05)
-                            .setStrokeStyle(4, 0xff00ff);
-                        
-                        let midPulse = this.add.circle(1000, 1000, 250, 0xff00ff, 0.08)
-                            .setStrokeStyle(3, 0xff00ff);
-                        
-                        let playerMarker = this.add.circle(1000, 1000, 100, 0xff00ff, 0.3)
-                            .setStrokeStyle(3, 0xff00ff);
-                        
-                        let playerText = this.add.text(1000, 1200, `👤 ${gameState.playerData.username}`, {
-                            font: 'bold 24px Arial',
-                            fill: '#ff00ff'
-                        }).setOrigin(0.5);
-                        
-                        container.add([outerPulse, midPulse, playerMarker, playerText]);
-                        
-                        // Animate pulse
-                        this.tweens.add({
-                            targets: [outerPulse, midPulse],
-                            alpha: [0.1, 0.3],
-                            duration: 1500,
-                            repeat: -1,
-                            yoyo: true
-                        });
-                    }
-                    
-                    // HQ/Base indicator
-                    if ((x + y) !== 9) {
-                        let color = isPlayerSector ? 0xff00ff : 0x00ff00;
-                        let hq = this.add.rectangle(1000, 1000, 180, 180, color, 0.2)
-                            .setStrokeStyle(4, color);
-                        let hqText = this.add.text(1000, 1000, isPlayerSector ? "HOME" : "HQ", { 
-                            font: 'bold 36px Courier', 
-                            fill: color 
-                        }).setOrigin(0.5);
-                        
-                        container.add([hq, hqText]);
-                    }
-
-                    // Spawn resources and bases
-                    spawnResources(this, container, x, y);
-                    spawnBasesInSector(this, container, sectorNum);
-                    
-                    // Interactive hit area
-                    let hitArea = this.add.rectangle(1000, 1000, 1980, 1980)
-                        .setFillStyle(0, 0)
-                        .setInteractive();
-                    hitArea.sectorNum = sectorNum;
-                    hitArea.on('pointerdown', () => {
-                        gameState.selectedSector = sectorNum;
-                        updateSectorInfo(sectorNum);
-                        addAlert(`Selected Sector ${sectorNum}`);
-                    });
-                    container.add(hitArea);
-                    
-                    this.add.container(posX, posY, container);
-                }
-            }
-        }
-
-        function startSyncLoop() {
-            console.log('🔄 Starting sync loop...');
-            setInterval(async () => {
-                await syncGameState();
-            }, UPDATE_INTERVAL);
-        }
-
-        function spawnResources(scene, container, sX, sY) {
-            const isIronWaste = (sX === 0 && sY > 0);
-            const resourceCount = isIronWaste ? 30 : 15;
-            
-            for (let i = 0; i < resourceCount; i++) {
-                const color = isIronWaste ? 0x888888 : (sX % 2 === 0 ? 0xffaa00 : 0x88aa00);
-                const size = isIronWaste ? 12 : 16;
-                const x = Math.random() * 1800 + 100;
-                const y = Math.random() * 1800 + 100;
-                
-                const circle = scene.add.circle(x, y, size, color, 0.7);
-                container.add(circle);
-                
-                // Gentle pulse animation
-                scene.tweens.add({
-                    targets: circle,
-                    alpha: [0.5, 0.8],
-                    scale: [0.9, 1.1],
-                    duration: 2000 + Math.random() * 1000,
-                    repeat: -1,
-                    yoyo: true
-                });
-            }
-        }
-
-        function spawnBasesInSector(scene, container, sectorNum) {
-            const basesInSector = Object.values(gameState.baseLocations)
-                .filter(b => b.sector === sectorNum);
-            
-            basesInSector.slice(0, 5).forEach((base, idx) => {
-                const angle = (idx * Math.PI * 2) / Math.min(5, basesInSector.length);
-                const x = 1000 + Math.cos(angle) * 650;
-                const y = 1000 + Math.sin(angle) * 650;
-                
-                // Threat level color
-                const isThreat = base.level > (gameState.playerData?.level || 1);
-                const color = isThreat ? 0xff4444 : 0xffdd00;
-                
-                const fortress = scene.add.rectangle(x, y, 120, 120, color, 0.6)
-                    .setStrokeStyle(3, color);
-                
-                const label = scene.add.text(x, y, `L${base.level}`, {
-                    font: 'bold 14px Arial',
-                    fill: color
-                }).setOrigin(0.5);
-                
-                // Threat indicator
-                if (isThreat) {
-                    const danger = scene.add.text(x, y - 80, '⚠️ THREAT', {
-                        font: 'bold 12px Arial',
-                        fill: '#ff4444'
-                    }).setOrigin(0.5);
-                    container.add(danger);
-                }
-                
-                container.add([fortress, label]);
-                
-                // Animate if threat
-                if (isThreat) {
-                    scene.tweens.add({
-                        targets: fortress,
-                        alpha: [0.5, 0.8],
-                        duration: 1000,
-                        repeat: -1,
-                        yoyo: true
-                    });
-                }
-            });
-        }
-
-        async function syncGameState() {
-            const now = Date.now();
-            if (now - lastUpdate < UPDATE_INTERVAL) return;
-            
-            lastUpdate = now;
-            
-            try {
-                const newData = await fetchPlayerData();
-                if (newData) {
-                    gameState.playerData = newData;
-                    updatePlayerInfo();
-                    updateConnectionStatus('success', '✅ Synced');
-                    
-                    // Check for new threats
-                    const newThreats = Object.values(gameState.baseLocations)
-                        .filter(b => b.sector === newData.sector && 
-                                    b.user_id !== newData.user_id &&
-                                    b.level > newData.level);
-                    
-                    if (newThreats.length > gameState.threats.length) {
-                        addAlert(`🔴 ${newThreats.length} THREATS DETECTED IN SECTOR!`);
-                    }
-                    
-                    gameState.threats = newThreats;
-                }
-            } catch (e) {
-                updateConnectionStatus('error', '❌ Sync failed');
-            }
-        }
-
-        function update() {
-            let zoom = this.cameras.main.zoom;
-            let p1 = this.input.pointer1;
-            let p2 = this.input.pointer2;
-
-            // Pinch to zoom
-            if (p1.isDown && p2.isDown) {
-                let dist = Phaser.Math.Distance.Between(p1.x, p1.y, p2.x, p2.y);
+        this.input.on('pointermove', (ptr) => {
+            if (!ptr.isDown) return;
+            const p2 = this.input.pointer2;
+            if (p2?.isDown) {
+                // Pinch zoom
+                const dist = Phaser.Math.Distance.Between(ptr.x, ptr.y, p2.x, p2.y);
                 if (this.lastPinchDist > 0) {
-                    let zoomChange = (dist - this.lastPinchDist) * 0.0005;
-                    this.cameras.main.zoom = Phaser.Math.Clamp(zoom + zoomChange, 0.04, 1.8);
+                    const delta = (dist - this.lastPinchDist) * 0.004;
+                    godCam.zoom = Phaser.Math.Clamp(godCam.zoom + delta, 0.04, 2.0);
                 }
                 this.lastPinchDist = dist;
-            } else {
-                this.lastPinchDist = 0;
+                return;
             }
-
-            // Pan (drag)
-            if (p1.isDown && !p2.isDown) {
-                if (p1.prevPosition) {
-                    this.cameras.main.scrollX -= (p1.x - p1.prevPosition.x) / zoom;
-                    this.cameras.main.scrollY -= (p1.y - p1.prevPosition.y) / zoom;
-                }
+            const dx = ptr.x - this.dragStart.x;
+            const dy = ptr.y - this.dragStart.y;
+            if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
+                this.isDragging = true;
+                godCam.scrollX = this.dragStart.cx - dx / godCam.zoom;
+                godCam.scrollY = this.dragStart.cy - dy / godCam.zoom;
             }
+        });
 
-            // Update UI
-            document.getElementById('zoom-level').textContent = `Zoom: ${(zoom * 100).toFixed(0)}%`;
-            document.getElementById('coordinates').textContent = 
-                `Pos: (${Math.round(this.cameras.main.scrollX)}, ${Math.round(this.cameras.main.scrollY)})`;
+        this.input.on('pointerup', () => {
+            this.lastPinchDist = 0;
+            setTimeout(() => { this.isDragging = false; }, 50);
+        });
+
+        // Mouse wheel zoom
+        this.input.on('wheel', (ptr, objs, dx, dy) => {
+            const delta = dy > 0 ? -0.05 : 0.05;
+            godCam.zoom = Phaser.Math.Clamp(godCam.zoom + delta, 0.04, 2.0);
+        });
+    }
+
+    update() {
+        document.getElementById('zoom-display').textContent = (godCam.zoom * 100).toFixed(0) + '%';
+
+        // Auto label view based on zoom
+        if (godCam.zoom > 0.25) {
+            document.getElementById('view-badge').textContent = 'COMMANDER VIEW';
+            document.getElementById('view-badge').style.color = '#88ffaa';
+        } else {
+            if (gameState.view === 'god') {
+                document.getElementById('view-badge').textContent = 'GOD VIEW';
+                document.getElementById('view-badge').style.color = '#ffaa00';
+            }
         }
+    }
 
-        function render() {
-            // Render loop for any additional visual updates
-        }
-
-        // ════════════════════════════════════════════════════════════════════
-        // INITIALIZE PHASER GAME AFTER ALL FUNCTIONS ARE DEFINED
-        // ════════════════════════════════════════════════════════════════════
-        const config = {
-            type: Phaser.AUTO,
-            scale: { mode: Phaser.Scale.RESIZE, width: '100%', height: '100%' },
-            backgroundColor: '#050a0f',
-            input: { activePointers: 3 },
-            scene: { preload, create, update, render }
+    seededRand(seed) {
+        let s = seed;
+        return () => {
+            s = (s * 1664525 + 1013904223) & 0xffffffff;
+            return (s >>> 0) / 0xffffffff;
         };
+    }
+}
 
-        const game = new Phaser.Game(config);
-    </script>
+// ══════════════════════════════════════════════
+//  PHASER — LAND SCENE (Ground-level view)
+// ══════════════════════════════════════════════
+
+class LandScene extends Phaser.Scene {
+    constructor() { super({ key: 'LandScene' }); }
+
+    init(data) {
+        this.sectorNum = data.sectorNum || 1;
+        this.biome = getBiome(this.sectorNum);
+        this.biomeIdx = (this.sectorNum - 1) % BIOMES.length;
+        this.rng = seededRandStatic(this.sectorNum * 31337);
+    }
+
+    preload() {
+        // Generate tile textures for this biome
+        this.generateBiomeTiles();
+    }
+
+    generateBiomeTiles() {
+        const biome = this.biome;
+        // Create 3 tile variants
+        [0, 1, 2].forEach(v => {
+            const key = `tile_${this.sectorNum}_${v}`;
+            if (this.textures.exists(key)) return;
+            const c = document.createElement('canvas');
+            c.width = TILE; c.height = TILE;
+            const ctx = c.getContext('2d');
+
+            // Base fill
+            const base = v === 0 ? biome.tile1 : v === 1 ? biome.tile2 : lerp(biome.tile1, biome.tile2, 0.5);
+            ctx.fillStyle = '#' + base.toString(16).padStart(6,'0');
+            ctx.fillRect(0,0,TILE,TILE);
+
+            // Texture noise
+            for (let i = 0; i < 20; i++) {
+                const bri = (this.rng() * 0.3 - 0.15);
+                ctx.fillStyle = `rgba(${bri>0?255:0},${bri>0?255:0},${bri>0?255:0},${Math.abs(bri)})`;
+                ctx.fillRect(
+                    (this.rng()*TILE)|0, (this.rng()*TILE)|0,
+                    (this.rng()*10+2)|0, (this.rng()*10+2)|0
+                );
+            }
+
+            // Border subtle
+            ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+            ctx.strokeRect(0,0,TILE,TILE);
+
+            this.textures.addCanvas(key, c);
+        });
+    }
+
+    create() {
+        const CAM_W = this.cameras.main.width;
+        const CAM_H = this.cameras.main.height;
+        const LAND_W = 60 * TILE;
+        const LAND_H = 60 * TILE;
+
+        const cam = this.cameras.main;
+        cam.setBounds(0, 0, LAND_W, LAND_H);
+        cam.setZoom(1.0);
+        cam.centerOn(LAND_W/2, LAND_H/2);
+
+        this.drawGround(LAND_W, LAND_H);
+        this.spawnLandResources(LAND_W, LAND_H);
+        this.spawnLandBases(LAND_W, LAND_H);
+        this.spawnLandDecor(LAND_W, LAND_H);
+
+        // Input
+        this.lastPinchDist = 0;
+        this.dragStart = { x:0, y:0, cx:0, cy:0 };
+        this.isDrag = false;
+
+        this.input.on('pointerdown', (ptr) => {
+            this.isDrag = false;
+            this.dragStart = { x:ptr.x, y:ptr.y, cx:cam.scrollX, cy:cam.scrollY };
+        });
+
+        this.input.on('pointermove', (ptr) => {
+            if (!ptr.isDown) return;
+            const p2 = this.input.pointer2;
+            if (p2?.isDown) {
+                const d = Phaser.Math.Distance.Between(ptr.x, ptr.y, p2.x, p2.y);
+                if (this.lastPinchDist > 0) {
+                    const delta = (d - this.lastPinchDist) * 0.005;
+                    cam.zoom = Phaser.Math.Clamp(cam.zoom + delta, 0.3, 3.0);
+                }
+                this.lastPinchDist = d;
+                return;
+            }
+            const dx = ptr.x - this.dragStart.x;
+            const dy = ptr.y - this.dragStart.y;
+            if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
+                this.isDrag = true;
+                cam.scrollX = this.dragStart.cx - dx / cam.zoom;
+                cam.scrollY = this.dragStart.cy - dy / cam.zoom;
+            }
+        });
+
+        this.input.on('pointerup', () => { this.lastPinchDist = 0; });
+
+        this.input.on('wheel', (p, o, dx, dy) => {
+            const cam = this.cameras.main;
+            cam.zoom = Phaser.Math.Clamp(cam.zoom + (dy > 0 ? -0.1 : 0.1), 0.3, 3.0);
+        });
+
+        toast(`🌍 Entering ${this.biome.name} — Sector ${this.sectorNum}`);
+    }
+
+    drawGround(W, H) {
+        const tilesX = Math.ceil(W / TILE);
+        const tilesY = Math.ceil(H / TILE);
+
+        for (let tx = 0; tx < tilesX; tx++) {
+            for (let ty = 0; ty < tilesY; ty++) {
+                const v = this.rng() < 0.6 ? 0 : this.rng() < 0.6 ? 1 : 2;
+                const key = `tile_${this.sectorNum}_${v}`;
+                const img = this.add.image(tx * TILE + TILE/2, ty * TILE + TILE/2, key);
+                img.setDisplaySize(TILE, TILE);
+            }
+        }
+
+        // Overlay subtle grid lines
+        const grid = this.add.graphics();
+        grid.lineStyle(1, 0xffffff, 0.03);
+        for (let i = 0; i <= tilesX; i++) grid.moveTo(i*TILE, 0).lineTo(i*TILE, H);
+        for (let j = 0; j <= tilesY; j++) grid.moveTo(0, j*TILE).lineTo(W, j*TILE);
+        grid.strokePath();
+    }
+
+    spawnLandResources(W, H) {
+        const biome = this.biome;
+        biome.res.forEach((resName, ri) => {
+            const style = RES_STYLES[resName] || { color:0x888888, size:8 };
+            const col = '#' + style.color.toString(16).padStart(6,'0');
+            const count = Math.floor(this.rng() * 12) + 8;
+
+            for (let i = 0; i < count; i++) {
+                const rx = this.rng() * (W - 200) + 100;
+                const ry = this.rng() * (H - 200) + 100;
+
+                // Glow circle
+                const glow = this.add.circle(rx, ry, style.size * 2.5, style.color, 0.12);
+
+                // Core dot
+                const dot = this.add.circle(rx, ry, style.size, style.color, 0.9);
+
+                // Label
+                const label = this.add.text(rx, ry + style.size + 14, resName, {
+                    font: `${Math.max(9, style.size + 2)}px Courier New`,
+                    color: col
+                }).setOrigin(0.5).setAlpha(0.7);
+
+                // Quantity badge
+                const qty = Math.floor(this.rng() * 90) + 10;
+                const badge = this.add.text(rx, ry - style.size - 10, qty.toString(), {
+                    font: 'bold 11px Arial',
+                    color: '#ffffff'
+                }).setOrigin(0.5).setAlpha(0.6);
+
+                // Animate
+                this.tweens.add({
+                    targets: [dot, glow], alpha: { from:0.5, to:1 },
+                    scale: { from:0.85, to:1.2 },
+                    duration: 1600 + this.rng()*1200, repeat:-1, yoyo:true, delay: this.rng()*600
+                });
+            }
+        });
+    }
+
+    spawnLandBases(W, H) {
+        const bases = Object.values(gameState.baseLocations).filter(b => b.sector === this.sectorNum);
+        const biome = this.biome;
+
+        bases.forEach((base, i) => {
+            const bx = this.rng() * (W - 400) + 200;
+            const by = this.rng() * (H - 400) + 200;
+            const isThreat = base.level > (gameState.playerData?.level || 1);
+            const col = isThreat ? 0xff4444 : 0xffdd00;
+            const colHex = '#' + col.toString(16).padStart(6,'0');
+
+            // Foundation
+            this.add.rectangle(bx, by, 120, 120, biome.bg).setStrokeStyle(3, col, 0.8);
+
+            // Keep
+            this.add.rectangle(bx, by - 20, 70, 80, col, 0.3).setStrokeStyle(2, col, 0.9);
+
+            // Towers
+            [-40, 40].forEach(offset => {
+                this.add.rectangle(bx + offset, by + 20, 22, 50, col, 0.5).setStrokeStyle(1, col, 0.7);
+            });
+
+            // Name + Level
+            this.add.text(bx, by - 80, base.base_name, {
+                font: 'bold 13px Courier New', color: colHex
+            }).setOrigin(0.5);
+
+            this.add.text(bx, by + 80, `LV${base.level}`, {
+                font: '11px Courier New', color: colHex
+            }).setOrigin(0.5).setAlpha(0.8);
+
+            if (isThreat) {
+                const warn = this.add.text(bx, by - 100, '⚠ THREAT', {
+                    font: 'bold 11px Arial', color: '#ff4444'
+                }).setOrigin(0.5);
+                this.tweens.add({ targets: warn, alpha: {from:0.4, to:1}, duration:700, repeat:-1, yoyo:true });
+            }
+        });
+
+        // Player base
+        if (gameState.playerData?.sector === this.sectorNum) {
+            const px = W / 2;
+            const py = H / 2;
+            this.add.circle(px, py, 100, 0xff88ff, 0.08).setStrokeStyle(4, 0xff88ff, 0.6);
+            this.add.rectangle(px, py, 140, 140, 0xff88ff, 0.15).setStrokeStyle(3, 0xff88ff, 0.9);
+            this.add.text(px, py, '🏠', { font: '32px Arial' }).setOrigin(0.5);
+            this.add.text(px, py + 90, 'YOUR BASE', {
+                font: 'bold 14px Courier New', color: '#ff88ff'
+            }).setOrigin(0.5);
+        }
+    }
+
+    spawnLandDecor(W, H) {
+        const biome = this.biome;
+        const accentCol = '#' + biome.accent.toString(16).padStart(6,'0');
+
+        // Ambient scatter — rocks/stumps/ruins
+        for (let i = 0; i < 40; i++) {
+            const dx = this.rng() * (W - 100) + 50;
+            const dy = this.rng() * (H - 100) + 50;
+            const sz = this.rng() * 10 + 4;
+            this.add.circle(dx, dy, sz, biome.accent, 0.08 + this.rng()*0.06);
+        }
+
+        // Sector name watermark
+        this.add.text(W/2, H/2, `SECTOR ${this.sectorNum}`, {
+            font: 'bold 200px Arial', color: accentCol
+        }).setOrigin(0.5).setAlpha(0.04);
+
+        // Compass rose
+        const cx = 80, cy = H - 80;
+        this.add.text(cx, cy, 'N', { font: 'bold 18px Courier New', color: accentCol }).setOrigin(0.5, 1).setAlpha(0.5);
+        this.add.text(cx, cy, '↑', { font: '20px Arial', color: accentCol }).setOrigin(0.5, 2).setAlpha(0.4);
+    }
+
+    update() {
+        const cam = this.cameras.main;
+        document.getElementById('zoom-display').textContent = (cam.zoom * 100).toFixed(0) + '%';
+    }
+}
+
+function seededRandStatic(seed) {
+    let s = seed;
+    return () => {
+        s = (s * 1664525 + 1013904223) & 0xffffffff;
+        return (s >>> 0) / 0xffffffff;
+    };
+}
+
+function lerp(a, b, t) {
+    const ar = (a >> 16) & 0xff, ag = (a >> 8) & 0xff, ab = a & 0xff;
+    const br = (b >> 16) & 0xff, bg = (b >> 8) & 0xff, bb = b & 0xff;
+    return ((((ar + (br-ar)*t)|0) << 16) | (((ag + (bg-ag)*t)|0) << 8) | ((ab + (bb-ab)*t)|0));
+}
+
+// ── PHASER BOOT ──
+const config = {
+    type: Phaser.AUTO,
+    parent: 'game-container',
+    scale: {
+        mode: Phaser.Scale.RESIZE,
+        width: '100%',
+        height: '100%'
+    },
+    backgroundColor: '#020912',
+    input: { activePointers: 3 },
+    scene: [WorldScene, LandScene]
+};
+
+const game = new Phaser.Game(config);
+</script>
 </body>
 </html>
