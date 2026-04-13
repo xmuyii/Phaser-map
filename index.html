@@ -10,7 +10,7 @@
 body{overflow:hidden;background:#020912;font-family:'Courier New',monospace;color:#00ff88;user-select:none}
 #game-container canvas{display:block}
 
-#top-hud{position:fixed;top:0;left:0;right:0;height:50px;background:rgba(2,9,18,0.97);border-bottom:1px solid rgba(0,255,136,0.25);display:flex;align-items:center;justify-content:space-between;padding:0 12px;z-index:100;backdrop-filter:blur(8px)}
+#top-hud{position:fixed;top:0;left:0;right:0;height:50px;background:rgba(2,9,18,0.97);border-bottom:1px solid rgba(0,255,136,0.25);display:flex;align-items:center;justify-content:space-between;padding:0 12px;z-index:90;backdrop-filter:blur(8px);pointer-events:none}
 .hud-title{font-size:13px;font-weight:bold;color:#00ff88;letter-spacing:3px;text-shadow:0 0 12px rgba(0,255,136,0.5)}
 #view-badge{font-size:9px;padding:4px 10px;border-radius:12px;border:1px solid currentColor;color:#ffaa00;letter-spacing:1.5px;transition:all .3s}
 #zoom-display{font-size:9px;color:rgba(0,255,136,0.5);min-width:36px;text-align:right}
@@ -86,7 +86,7 @@ body{overflow:hidden;background:#020912;font-family:'Courier New',monospace;colo
 .tname{font-size:11px;color:#aac4dd}.tavail{font-size:10px;color:rgba(68,170,255,.55)}
 .tinput{width:58px;background:rgba(68,170,255,.06);border:1px solid rgba(68,170,255,.25);color:#44aaff;padding:5px 7px;border-radius:5px;font-family:'Courier New',monospace;font-size:11px;text-align:center;outline:none}
 
-#place-hint{position:fixed;bottom:95px;left:50%;transform:translateX(-50%);background:rgba(0,255,136,.12);border:1px solid rgba(0,255,136,.4);color:#00ff88;padding:8px 18px;border-radius:20px;font-size:10px;z-index:95;display:none;letter-spacing:1px;pointer-events:none;animation:ph 1.5s infinite}
+#place-hint{position:fixed;bottom:95px;left:50%;transform:translateX(-50%);background:rgba(0,255,136,.18);border:2px solid rgba(0,255,136,.6);color:#00ff88;padding:12px 24px;border-radius:24px;font-size:11px;z-index:95;display:none;letter-spacing:1px;pointer-events:none;animation:ph 1.2s infinite;font-weight:bold;box-shadow:0 0 20px rgba(0,255,136,.2)}
 @keyframes ph{0%,100%{opacity:.65}50%{opacity:1}}
 
 .abtn{padding:7px 10px;background:rgba(255,170,0,.08);border:1px solid rgba(255,170,0,.4);color:#ffaa00;border-radius:6px;font-size:10px;font-family:'Courier New',monospace;cursor:pointer;letter-spacing:.5px;transition:all .15s}
@@ -218,6 +218,7 @@ body{overflow:hidden;background:#020912;font-family:'Courier New',monospace;colo
 
 const SECTOR_SIZE=2000, GRID=8;
 const ISO_TW=96, ISO_TH=48;
+const TOTAL_SECTORS = 64;
 
 const BIOMES=[
   {name:'Ashlands',  bg:0x150606,t1:0x3a0e0e,t2:0x4d1414,t3:0x280808,accent:0xff4422,fog:0x441100,res:['Iron','Coal','Ash']},
@@ -534,50 +535,75 @@ class WorldScene extends Phaser.Scene{
   }
   create(){
     worldScene=this;init();
-    const W=SECTOR_SIZE*GRID,H=SECTOR_SIZE*GRID;
+    const CENTER_X = SECTOR_SIZE * 8;
+    const CENTER_Y = SECTOR_SIZE * 8;
+    const WORLD_RADIUS = SECTOR_SIZE * 9;
+    
     godCam=this.cameras.main;
-    godCam.setBounds(0,0,W,H);godCam.setZoom(0.05);godCam.centerOn(W/2,H/2);
-    this._buildWorld();this._setupInput();
+    godCam.setBounds(CENTER_X - WORLD_RADIUS * 1.2, CENTER_Y - WORLD_RADIUS * 1.2, WORLD_RADIUS * 2.4, WORLD_RADIUS * 2.4);
+    godCam.setZoom(0.08);
+    godCam.centerOn(CENTER_X, CENTER_Y);
+    
+    this._buildWorld();
+    this._setupInput();
     this.lastPinch=0;this.dragging=false;this.dO={x:0,y:0,cx:0,cy:0};
   }
   _buildWorld(){
-    for(let gx=0;gx<GRID;gx++){
-      for(let gy=0;gy<GRID;gy++){
-        const n=gx*GRID+gy+1,px=gx*SECTOR_SIZE,py=gy*SECTOR_SIZE;
-        const biome=getBiome(n),bi=(n-1)%BIOMES.length;
-        G.allSectors[n]={x:px+1000,y:py+1000,gx,gy};
-        const cont=this.add.container(px,py);
-        cont.add(this.add.rectangle(1000,1000,1980,1980,biome.bg).setStrokeStyle(3,biome.accent,.35));
-        cont.add(this.add.text(1000,1000,n.toString(),{font:'bold 320px Arial',color:'#'+biome.accent.toString(16).padStart(6,'0')}).setOrigin(.5).setAlpha(.055));
-        cont.add(this.add.text(1000,220,biome.name.toUpperCase(),{font:'72px Courier New',color:'#'+biome.accent.toString(16).padStart(6,'0')}).setOrigin(.5).setAlpha(.3));
-        const rng=mkRng(n*113);
-        biome.res.forEach(r=>{
-          const m=RES_META[r]||{c:0x888888,sz:6};
-          for(let i=0;i<(rng()*5|0)+3;i++){
-            const dot=this.add.circle(rng()*1700+150,rng()*1700+150,m.sz+3,m.c,.7);
-            cont.add(dot);
-            this.tweens.add({targets:dot,alpha:{from:.3,to:.9},scale:{from:.85,to:1.2},duration:1600+rng()*1200,repeat:-1,yoyo:true,delay:rng()*800});
-          }
-        });
-        Object.values(G.baseLocations).filter(b=>b.sector===n).slice(0,5).forEach((base,i)=>{
-          const angle=(i/5)*Math.PI*2,bx=1000+Math.cos(angle)*580,by=1000+Math.sin(angle)*580;
-          const threat=base.level>(G.playerData?.level||1),col=threat?0xff4444:0xffdd44;
-          const sq=this.add.rectangle(bx,by,110,110,col,.22).setStrokeStyle(3,col,.75);
-          cont.add(sq);cont.add(this.add.text(bx,by,`L${base.level}`,{font:'bold 55px Arial',color:'#'+col.toString(16).padStart(6,'0')}).setOrigin(.5));
-          if(threat)this.tweens.add({targets:sq,alpha:{from:.18,to:.55},duration:900,repeat:-1,yoyo:true});
-        });
-        if(G.playerData?.sector===n){
-          const pr=this.add.circle(1000,1100,200,0xff88ff,.07).setStrokeStyle(5,0xff88ff,.65);
-          const pd=this.add.circle(1000,1100,75,0xff88ff,.45);
-          cont.add([pr,pd,this.add.text(1000,1320,'⭐ HOME',{font:'bold 65px Arial',color:'#ff88ff'}).setOrigin(.5).setAlpha(.8)]);
-          this.tweens.add({targets:[pr,pd],alpha:{from:.25,to:.85},duration:1800,repeat:-1,yoyo:true});
-        }
-        const hit=this.add.rectangle(1000,1000,1980,1980,0,0).setInteractive();
-        hit.on('pointerdown',(ptr,lx,ly,e)=>{e.stopPropagation();this._tapS=n;this._tapMoved=false});
-        hit.on('pointerup',()=>{if(!this._tapMoved&&this._tapS===n)showSectorPopup(n)});
-        cont.add(hit);
+    const CENTER_X = SECTOR_SIZE * 8;
+    const CENTER_Y = SECTOR_SIZE * 8;
+    const ORBIT_RADIUS = SECTOR_SIZE * 6;
+    
+    // Arrange 64 sectors in orbital rings around planet
+    for(let n = 1; n <= TOTAL_SECTORS; n++){
+      // Calculate position in orbital layout
+      // Inner ring (sectors 1-16): radius 3
+      // Middle ring (sectors 17-40): radius 5
+      // Outer ring (sectors 41-64): radius 7
+      let ring, sectorInRing, angle, radius;
+      
+      if(n <= 16){
+        ring = 1;
+        sectorInRing = n - 1;
+        angle = (sectorInRing / 16) * Math.PI * 2;
+        radius = SECTOR_SIZE * 3;
+      } else if(n <= 40){
+        ring = 2;
+        sectorInRing = n - 17;
+        angle = (sectorInRing / 24) * Math.PI * 2;
+        radius = SECTOR_SIZE * 5;
+      } else {
+        ring = 3;
+        sectorInRing = n - 41;
+        angle = (sectorInRing / 24) * Math.PI * 2;
+        radius = SECTOR_SIZE * 7;
       }
+      
+      const px = CENTER_X + Math.cos(angle) * radius;
+      const py = CENTER_Y + Math.sin(angle) * radius;
+      
+      G.allSectors[n] = {x: px, y: py, gx: Math.cos(angle), gy: Math.sin(angle), ring: ring};
+      
+      const biome = getBiome(n);
+      const bi = (n - 1) % BIOMES.length;
+      
+      const cont = this.add.container(px, py);
+      cont.add(this.add.rectangle(0, 0, 180, 180, biome.bg).setStrokeStyle(2, biome.accent, .5));
+      cont.add(this.add.text(0, -40, n.toString(), {font: 'bold 80px Arial', color: '#' + biome.accent.toString(16).padStart(6, '0')}).setOrigin(.5).setAlpha(.4));
+      cont.add(this.add.text(0, 50, biome.name.slice(0,6).toUpperCase(), {font: '14px Courier New', color: '#' + biome.accent.toString(16).padStart(6, '0')}).setOrigin(.5).setAlpha(.5));
+      
+      // Add resource indicators
+      cont.add(this.add.circle(-35, -35, 6, 0xffdd00, .6));
+      
+      const hit = this.add.rectangle(0, 0, 200, 200, 0, 0).setInteractive();
+      hit.on('pointerdown', (ptr, lx, ly, e) => {e.stopPropagation(); this._tapS = n; this._tapMoved = false});
+      hit.on('pointerup', () => {if(!this._tapMoved && this._tapS === n) showSectorPopup(n)});
+      cont.add(hit);
     }
+    
+    // Draw planet core at center
+    const core = this.add.circle(CENTER_X, CENTER_Y, SECTOR_SIZE * 1.2, 0x1a1a2e, .8);
+    core.setStrokeStyle(3, 0x00ff88, .3);
+    this.add.text(CENTER_X, CENTER_Y, "🌍", {font: '120px Arial'}).setOrigin(.5).setAlpha(.7);
   }
   _setupInput(){
     this.input.on('pointerdown',(ptr)=>{this.dragging=false;this._tapMoved=false;this.dO={x:ptr.x,y:ptr.y,cx:godCam.scrollX,cy:godCam.scrollY}});
@@ -608,8 +634,8 @@ class LandScene extends Phaser.Scene{
     this.sNum=data.sectorNum||1;
     this.biome=getBiome(this.sNum);
     this.rng=mkRng(this.sNum*77777);
-    this.COLS=30;
-    this.ROWS=30;
+    this.COLS=50;  // Bigger sector
+    this.ROWS=50;
     this.originX=0;
     this.originY=0;
   }
@@ -619,35 +645,55 @@ class LandScene extends Phaser.Scene{
     const cam=this.cameras.main;
     const W=cam.width,H=cam.height;
     this.originX=W/2;
-    this.originY=100;
+    this.originY=150;  // More ground visible
+    
+    // Multi-layer background gradient
     this.add.graphics().fillGradientStyle(0x000000,0x000000,this.biome.fog,this.biome.fog,1,1,.1,.1).fillRect(0,0,8000,6000);
     cam.setBackgroundColor(this.biome.bg);
-    this.add.graphics().fillGradientStyle(0x000000,0x000000,this.biome.fog,this.biome.fog,1,1,.1,.1).fillRect(-2000,-1000,8000,6000);
-    const stars=this.add.graphics();stars.fillStyle(0xffffff,.6);
+    
+    // Tilted ground effect
+    const tiltGfx = this.add.graphics();
+    tiltGfx.fillGradientStyle(this.biome.bg, this.biome.bg, this.biome.fog, this.biome.fog, 1, 1, .1, .1);
+    tiltGfx.fillRect(-2000, -500, 8000, 7000);
+    
+    // Atmosphere
+    const stars=this.add.graphics();
+    stars.fillStyle(0xffffff,.6);
     for(let i=0;i<100;i++)stars.fillCircle(this.rng()*8000,this.rng()*400,(this.rng()*1.5+.3));
+    
+    // Nebula/atmosphere
     const neb=this.add.graphics();
-    for(let i=0;i<6;i++){neb.fillStyle(this.biome.accent,.015+this.rng()*.02);neb.fillEllipse(this.rng()*W*2-W*.5,this.rng()*200,400+this.rng()*600,80+this.rng()*120)}
+    for(let i=0;i<8;i++){
+      neb.fillStyle(this.biome.accent,.015+this.rng()*.025);
+      neb.fillEllipse(this.rng()*W*2-W*.5,this.rng()*300,500+this.rng()*700,100+this.rng()*150)
+    }
+    
     const heights=this._hmap();
+    
+    // Draw terrain with better height variation
     for(let row=0;row<this.ROWS;row++){
       for(let col=0;col<this.COLS;col++){
         const pos=this._iso(col,row);
         const hv=heights[row][col];
         const elevated=hv>.68;
         const key=elevated?`iso_${this.sNum}_e`:hv>.55?`iso_${this.sNum}_1`:hv>.4?`iso_${this.sNum}_0`:hv>.25?`iso_${this.sNum}_2`:this.rng()<.35?`iso_${this.sNum}_3`:`iso_${this.sNum}_4`;
-        const eOff=elevated?26:0;
+        const eOff=elevated?26+Math.floor(hv*30):Math.floor(hv*10);  // More height variation
         const pos2=this._iso(col,row,eOff);
         this.add.image(pos2.x,pos2.y,key).setOrigin(.5,0);
       }
     }
+    
     this._spawnResources(heights);
     this._spawnBases(heights);
     this._spawnDecor(heights);
+    
     const worldW=(this.COLS+this.ROWS)*(ISO_TW/2);
-    const worldH=(this.COLS+this.ROWS)*(ISO_TH/2)+400;
-    cam.setBounds(-worldW*.25,-50,worldW*1.5,worldH+300);
-    cam.setZoom(1.0);
+    const worldH=(this.COLS+this.ROWS)*(ISO_TH/2)+600;
+    cam.setBounds(-worldW*.25,-150,worldW*1.5,worldH+400);
+    cam.setZoom(0.85);  // Better zoom for bigger sectors
     cam.centerOn(this.originX,this.originY+(this.COLS+this.ROWS)*(ISO_TH/4));
-    cam.fadeIn(800,0,0,0);
+    cam.fadeIn(600,0,0,0);
+    
     this._setupInput(cam);
     toast(`🌍 ${this.biome.name} · Sector ${this.sNum}`,'info');
   }
@@ -665,7 +711,13 @@ class LandScene extends Phaser.Scene{
     });
     this.input.on('pointerup',(ptr)=>{
       this.lastPinch=0;
-      if(!this.isDrag&&G.placingBase){G.placingBase=false;document.getElementById('place-hint').style.display='none';showBaseModal(G.activeLandSector)}
+      if(!this.isDrag && G.placingBase){
+        G.placingBase=false;
+        document.getElementById('place-hint').style.display='none';
+        // Auto-show base modal on ground click
+        showBaseModal(G.activeLandSector);
+        toast('✅ Tap to confirm base location','info');
+      }
     });
     this.input.on('wheel',(p,o,dx,dy)=>{cam.zoom=Phaser.Math.Clamp(cam.zoom+(dy>0?-.12:.12),.32,3.5)});
     toast(`🌍 ${this.biome.name} · Sector ${this.sNum}`,'info');
@@ -673,20 +725,20 @@ class LandScene extends Phaser.Scene{
   _spawnResources(heights){
     this.biome.res.forEach(r=>{
       const m=RES_META[r]||{c:0x888888,sz:6};
-      const count=(this.rng()*10|0)+7;
+      const count=(this.rng()*18|0)+12;  // More resources in bigger sectors
       for(let i=0;i<count;i++){
-        const col=Math.floor(this.rng()*(this.COLS-6)+3);
-        const row=Math.floor(this.rng()*(this.ROWS-6)+3);
-        if(heights[row][col]>.82)continue;
-        const eOff=heights[row][col]>.68?26:0;
+        const col=Math.floor(this.rng()*(this.COLS-8)+4);
+        const row=Math.floor(this.rng()*(this.ROWS-8)+4);
+        if(heights[row][col]>.85)continue;  // Skip very high peaks
+        const eOff=heights[row][col]>.68?26+Math.floor(heights[row][col]*20):0;
         const pos=this._iso(col,row,eOff);
-        const py=pos.y+ISO_TH/2+8;
-        const glow=this.add.circle(pos.x,py,m.sz*3.2,m.c,.08);
+        const py=pos.y+ISO_TH/2+12;
+        const glow=this.add.circle(pos.x,py,m.sz*4,m.c,.1);
         const node=this.add.circle(pos.x,py,m.sz,m.c,.95);
-        const qty=(this.rng()*80+15)|0;
-        const lbl=this.add.text(pos.x,py-m.sz-14,r,{font:`${m.sz+4}px Courier New`,color:'#'+m.c.toString(16).padStart(6,'0')}).setOrigin(.5).setAlpha(.75);
-        this.add.text(pos.x,py+m.sz+7,qty+'',{font:'bold 10px Arial',color:'#fff'}).setOrigin(.5).setAlpha(.45);
-        this.tweens.add({targets:[node,glow],alpha:{from:.45,to:1},scale:{from:.8,to:1.3},duration:1300+this.rng()*900,repeat:-1,yoyo:true,delay:this.rng()*700});
+        const qty=(this.rng()*120+30)|0;
+        const lbl=this.add.text(pos.x,py-m.sz-18,r,{font:`${m.sz+6}px Courier New`,color:'#'+m.c.toString(16).padStart(6,'0')}).setOrigin(.5).setAlpha(.8);
+        this.add.text(pos.x,py+m.sz+10,qty+'',{font:'bold 12px Arial',color:'#fff'}).setOrigin(.5).setAlpha(.55);
+        this.tweens.add({targets:[node,glow],alpha:{from:.45,to:1},scale:{from:.75,to:1.4},duration:1500+this.rng()*1000,repeat:-1,yoyo:true,delay:this.rng()*800});
       }
     });
   }
