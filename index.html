@@ -91,6 +91,17 @@ body{overflow:hidden;background:#020912;font-family:'Courier New',monospace;colo
 
 .abtn{padding:7px 10px;background:rgba(255,170,0,.08);border:1px solid rgba(255,170,0,.4);color:#ffaa00;border-radius:6px;font-size:10px;font-family:'Courier New',monospace;cursor:pointer;letter-spacing:.5px;transition:all .15s}
 .abtn:active{transform:scale(.93);background:rgba(255,170,0,.2)}
+
+#teleport-modal{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%) scale(.88);width:min(320px,90vw);background:rgba(4,12,24,0.99);border:2px solid #00ff88;border-radius:14px;padding:20px;z-index:950;opacity:0;pointer-events:none;transition:all .25s cubic-bezier(.34,1.56,.64,1);box-shadow:0 0 50px rgba(0,255,136,.4),0 20px 60px rgba(0,0,0,.9)}
+#teleport-modal.on{opacity:1;pointer-events:all;transform:translate(-50%,-50%) scale(1)}
+#teleport-modal h3{font-size:13px;color:#00ff88;letter-spacing:2px;margin-bottom:14px;border-bottom:1px solid rgba(0,255,136,.4);padding-bottom:10px}
+.tmod-info{font-size:10px;color:rgba(0,255,136,.6);line-height:1.8;margin-bottom:14px}
+.tmod-info div{margin:5px 0}
+#teleport-modal .modal-btns{display:flex;gap:8px}
+#teleport-modal .mbtn{flex:1;padding:10px;border-radius:8px;font-size:11px;font-family:'Courier New',monospace;cursor:pointer;border:1px solid;letter-spacing:.5px;background:transparent;transition:all .15s}
+#teleport-modal .mbtn:active{transform:scale(.95)}
+#teleport-modal .mbtn.confirm{color:#00ff88;border-color:#00ff88;background:rgba(0,255,136,.09)}
+#teleport-modal .mbtn.cancel{color:rgba(255,255,255,.3);border-color:rgba(255,255,255,.12)}
 </style>
 </head>
 <body>
@@ -158,6 +169,21 @@ body{overflow:hidden;background:#020912;font-family:'Courier New',monospace;colo
   <div class="modal-btns">
     <button class="mbtn" style="color:#44aaff;border-color:#44aaff;background:rgba(68,170,255,.09)" id="tm-confirm">⚔️ DEPLOY</button>
     <button class="mbtn x" id="tm-cancel">✕ CANCEL</button>
+  </div>
+</div>
+
+<div id="teleport-modal">
+  <h3>🌍 TELEPORT</h3>
+  <div class="tmod-info">
+    <div id="tm-sector-name">Sector 1</div>
+    <div id="tm-sector-resources">Resources: Wood, Iron</div>  
+    <div id="tm-sector-threat">Threat Level: Low</div>
+  </div>
+  <div style="font-size:9px;color:rgba(0,255,136,.4);margin-bottom:12px" id="tm-hint">Send this command to Telegram to confirm:</div>
+  <div style="font-size:11px;background:rgba(0,255,136,.05);border:1px solid rgba(0,255,136,.2);padding:8px;border-radius:6px;margin-bottom:12px;font-family:monospace;color:#00ff88" id="tm-cmd">/teleport 1</div>
+  <div class="modal-btns">
+    <button class="mbtn confirm" id="tm-confirm-btn">✅ CONFIRM</button>
+    <button class="mbtn cancel" id="tm-cancel-btn">❌ CANCEL</button>
   </div>
 </div>
 
@@ -337,7 +363,7 @@ function updateBasesTab(){
 function setupActions(){
   document.getElementById('btn-raid').onclick=()=>{if(!G.selectedSector){toast('⚠️ Select a sector');return}toast(`💥 Raid Sector ${G.selectedSector}`)};
   document.getElementById('btn-scout').onclick=()=>{if(!G.selectedSector){toast('⚠️ Select a sector');return}toast(`🔍 Scouting Sector ${G.selectedSector}...`)};
-  document.getElementById('btn-teleport').onclick=()=>{if(!G.selectedSector){toast('⚠️ Select a sector');return}toast(`⚡ Teleporting to Sector ${G.selectedSector}`)};
+  document.getElementById('btn-teleport').onclick=()=>{if(!G.selectedSector){toast('⚠️ Select a sector');return}showTeleportModal(G.selectedSector)};
   document.getElementById('btn-weapon').onclick=()=>toast('🔫 Use /use_weapon in Telegram');
   document.getElementById('btn-help').onclick=()=>toast('💡 Tap sector → ENTER → 🏰 Base or ⚔️ Troops','info');
   document.getElementById('btn-place-base').onclick=()=>showBaseModal();
@@ -368,7 +394,7 @@ function showSectorPopup(n){
 }
 function hidePopup(){document.getElementById('sector-popup').classList.remove('on');document.getElementById('dimmer').classList.remove('on')}
 document.getElementById('popup-close-btn').addEventListener('click',hidePopup);
-document.getElementById('dimmer').addEventListener('click',()=>{hidePopup();hideBaseModal();hideTroopModal()});
+document.getElementById('dimmer').addEventListener('click',()=>{hidePopup();hideBaseModal();hideTroopModal();hideTeleportModal()});
 document.getElementById('popup-enter-btn').addEventListener('click',()=>{const n=G.selectedSector;hidePopup();if(n)enterLandView(n)});
 document.getElementById('popup-troops-btn').addEventListener('click',()=>{const n=G.selectedSector;hidePopup();showTroopModal(n)});
 document.getElementById('popup-base-btn').addEventListener('click',()=>{const n=G.selectedSector;hidePopup();showBaseModal(n)});
@@ -401,6 +427,12 @@ function setupModals(){
   });
   document.getElementById('tm-cancel').addEventListener('click',hideTroopModal);
   document.getElementById('tm-confirm').addEventListener('click',confirmDeploy);
+  document.getElementById('tm-cancel-btn').addEventListener('click',hideTeleportModal);
+  document.getElementById('tm-confirm-btn').addEventListener('click',()=>{
+    const cmd=document.getElementById('tm-cmd').textContent;
+    toast(`📢 Send "${cmd}" to @the64bot on Telegram!`,'info');
+    hideTeleportModal();
+  });
 }
 
 // TROOP MODAL
@@ -434,6 +466,24 @@ function confirmDeploy(){
   toast(`⚔️ ${total} troops deployed to Sector ${troopTarget}!`,'info');
   if(G.view==='land'&&landScene)landScene.showMarch(total);
 }
+
+// TELEPORT MODAL
+let teleportSector=null;
+function showTeleportModal(sector){
+  teleportSector=sector||G.selectedSector;
+  if(!teleportSector){toast('⚠️ Select a sector first');return}
+  const biome=getBiome(teleportSector);
+  const bases=Object.values(G.baseLocations).filter(b=>b.sector===teleportSector).length;
+  const thr=G.threats.filter(t=>t.sector===teleportSector).length;
+  const threat=thr>3?'CRITICAL':thr>0?'HIGH':'LOW';
+  document.getElementById('tm-sector-name').textContent=`📍 Sector ${teleportSector} · ${biome.name}`;
+  document.getElementById('tm-sector-resources').textContent=`Resources: ${biome.res.join(', ')}`;
+  document.getElementById('tm-sector-threat').textContent=`Threat Level: ${threat} (${bases} bases)`;
+  document.getElementById('tm-cmd').textContent=`/teleport ${teleportSector}`;
+  document.getElementById('teleport-modal').classList.add('on');
+  document.getElementById('dimmer').classList.add('on');
+}
+function hideTeleportModal(){document.getElementById('teleport-modal').classList.remove('on');document.getElementById('dimmer').classList.remove('on')}
 
 // LAND VIEW
 function enterLandView(n){
@@ -558,122 +608,52 @@ class LandScene extends Phaser.Scene{
     this.sNum=data.sectorNum||1;
     this.biome=getBiome(this.sNum);
     this.rng=mkRng(this.sNum*77777);
-    this.COLS=38;this.ROWS=38;
-    this.originX=0;this.originY=0;
+    this.COLS=30;
+    this.ROWS=30;
+    this.originX=0;
+    this.originY=0;
   }
-  preload(){this._mkTiles()}
-
-  _mkTiles(){
-    const b=this.biome;
-    const TW=ISO_TW,TH=ISO_TH;
-    const shades=[b.t1,b.t2,b.t3,lerpColor(b.t1,b.t2,.4),lerpColor(b.t2,b.t3,.5)];
-    shades.forEach((shade,v)=>{
-      const key=`iso_${this.sNum}_${v}`;
-      if(this.textures.exists(key))return;
-      const depth=18,cw=TW,ch=TH+depth;
-      const cv=document.createElement('canvas');cv.width=cw;cv.height=ch;
-      const ctx=cv.getContext('2d');
-      const sh='#'+shade.toString(16).padStart(6,'0');
-      const side='#'+darken(shade,.3).toString(16).padStart(6,'0');
-      const dark='#'+darken(shade,.5).toString(16).padStart(6,'0');
-      // TOP face
-      ctx.beginPath();ctx.moveTo(TW/2,0);ctx.lineTo(TW,TH/2);ctx.lineTo(TW/2,TH);ctx.lineTo(0,TH/2);ctx.closePath();
-      ctx.fillStyle=sh;ctx.fill();
-      // noise
-      for(let i=0;i<16;i++){ctx.fillStyle=`rgba(${Math.random()>.5?255:0},${Math.random()>.5?200:0},0,${Math.random()*.07})`;ctx.fillRect((Math.random()*TW)|0,(Math.random()*TH)|0,(Math.random()*8+2)|0,(Math.random()*6+2)|0)}
-      // LEFT face
-      ctx.beginPath();ctx.moveTo(0,TH/2);ctx.lineTo(TW/2,TH);ctx.lineTo(TW/2,TH+depth);ctx.lineTo(0,TH/2+depth);ctx.closePath();ctx.fillStyle=side;ctx.fill();
-      // RIGHT face
-      ctx.beginPath();ctx.moveTo(TW/2,TH);ctx.lineTo(TW,TH/2);ctx.lineTo(TW,TH/2+depth);ctx.lineTo(TW/2,TH+depth);ctx.closePath();ctx.fillStyle=dark;ctx.fill();
-      // Top outline
-      ctx.beginPath();ctx.moveTo(TW/2,0);ctx.lineTo(TW,TH/2);ctx.lineTo(TW/2,TH);ctx.lineTo(0,TH/2);ctx.closePath();
-      ctx.strokeStyle='rgba(255,255,255,0.07)';ctx.lineWidth=1;ctx.stroke();
-      // Accent glow
-      if(v===0||v===2){ctx.strokeStyle='#'+b.accent.toString(16).padStart(6,'0')+'18';ctx.lineWidth=1.5;ctx.stroke()}
-      this.textures.addCanvas(key,cv);
-    });
-    // Elevated tile
-    const ekey=`iso_${this.sNum}_e`;
-    if(!this.textures.exists(ekey)){
-      const depth=32,TW2=TW,TH2=TH;
-      const cv=document.createElement('canvas');cv.width=TW2;cv.height=TH2+depth;
-      const ctx=cv.getContext('2d');
-      const top='#'+lerpColor(b.t2,0xffffff,.15).toString(16).padStart(6,'0');
-      const s='#'+darken(b.t2,.35).toString(16).padStart(6,'0');
-      const dk='#'+darken(b.t1,.55).toString(16).padStart(6,'0');
-      ctx.beginPath();ctx.moveTo(TW2/2,0);ctx.lineTo(TW2,TH2/2);ctx.lineTo(TW2/2,TH2);ctx.lineTo(0,TH2/2);ctx.closePath();ctx.fillStyle=top;ctx.fill();
-      ctx.beginPath();ctx.moveTo(0,TH2/2);ctx.lineTo(TW2/2,TH2);ctx.lineTo(TW2/2,TH2+depth);ctx.lineTo(0,TH2/2+depth);ctx.closePath();ctx.fillStyle=s;ctx.fill();
-      ctx.beginPath();ctx.moveTo(TW2/2,TH2);ctx.lineTo(TW2,TH2/2);ctx.lineTo(TW2,TH2/2+depth);ctx.lineTo(TW2/2,TH2+depth);ctx.closePath();ctx.fillStyle=dk;ctx.fill();
-      this.textures.addCanvas(ekey,cv);
-    }
-  }
-
-  _hmap(){
-    const h=[];const rng=mkRng(this.sNum*99991);
-    for(let r=0;r<this.ROWS;r++){h[r]=[];for(let c=0;c<this.COLS;c++){
-      const n1=Math.sin(r*.28+this.sNum)* Math.cos(c*.28)*.5+.5;
-      const n2=Math.sin(r*.65+c*.5+this.sNum*.4)*.3+.3;
-      h[r][c]=Math.min(1,(n1+n2+rng()*.2)/1.3);
-    }}return h;
-  }
-
-  _iso(col,row,elevOff=0){
-    return{
-      x:this.originX+(col-row)*(ISO_TW/2),
-      y:this.originY+(col+row)*(ISO_TH/2)-elevOff
-    };
-  }
-
+  preload(){this.load.image('ground_tex','image-6.jpg')}
   create(){
     landScene=this;
     const cam=this.cameras.main;
     const W=cam.width,H=cam.height;
     this.originX=W/2;
     this.originY=100;
-
-    // Space bg with subtle gradient
     this.add.graphics().fillGradientStyle(0x000000,0x000000,this.biome.fog,this.biome.fog,1,1,.1,.1).fillRect(0,0,8000,6000);
-
-    // Stars
+    cam.setBackgroundColor(this.biome.bg);
+    this.add.graphics().fillGradientStyle(0x000000,0x000000,this.biome.fog,this.biome.fog,1,1,.1,.1).fillRect(-2000,-1000,8000,6000);
     const stars=this.add.graphics();stars.fillStyle(0xffffff,.6);
     for(let i=0;i<100;i++)stars.fillCircle(this.rng()*8000,this.rng()*400,(this.rng()*1.5+.3));
-
-    // Nebula wisps
     const neb=this.add.graphics();
-    for(let i=0;i<6;i++){
-      neb.fillStyle(this.biome.accent,.015+this.rng()*.02);
-      neb.fillEllipse(this.rng()*W*2-W*.5,this.rng()*200,400+this.rng()*600,80+this.rng()*120);
-    }
-
+    for(let i=0;i<6;i++){neb.fillStyle(this.biome.accent,.015+this.rng()*.02);neb.fillEllipse(this.rng()*W*2-W*.5,this.rng()*200,400+this.rng()*600,80+this.rng()*120)}
     const heights=this._hmap();
-
-    // Draw iso tiles bottom-up for correct depth
     for(let row=0;row<this.ROWS;row++){
       for(let col=0;col<this.COLS;col++){
+        const pos=this._iso(col,row);
         const hv=heights[row][col];
         const elevated=hv>.68;
-        const key=elevated?`iso_${this.sNum}_e`:
-          hv>.55?`iso_${this.sNum}_1`:
-          hv>.4?`iso_${this.sNum}_0`:
-          hv>.25?`iso_${this.sNum}_2`:
-          this.rng()<.35?`iso_${this.sNum}_3`:`iso_${this.sNum}_4`;
+        const key=elevated?`iso_${this.sNum}_e`:hv>.55?`iso_${this.sNum}_1`:hv>.4?`iso_${this.sNum}_0`:hv>.25?`iso_${this.sNum}_2`:this.rng()<.35?`iso_${this.sNum}_3`:`iso_${this.sNum}_4`;
         const eOff=elevated?26:0;
-        const pos=this._iso(col,row,eOff);
-        this.add.image(pos.x,pos.y,key).setOrigin(.5,0);
+        const pos2=this._iso(col,row,eOff);
+        this.add.image(pos2.x,pos2.y,key).setOrigin(.5,0);
       }
     }
-
     this._spawnResources(heights);
     this._spawnBases(heights);
     this._spawnDecor(heights);
-
-    // World bounds
     const worldW=(this.COLS+this.ROWS)*(ISO_TW/2);
     const worldH=(this.COLS+this.ROWS)*(ISO_TH/2)+400;
     cam.setBounds(-worldW*.25,-50,worldW*1.5,worldH+300);
     cam.setZoom(1.0);
     cam.centerOn(this.originX,this.originY+(this.COLS+this.ROWS)*(ISO_TH/4));
-
+    cam.fadeIn(800,0,0,0);
+    this._setupInput(cam);
+    toast(`🌍 ${this.biome.name} · Sector ${this.sNum}`,'info');
+  }
+  _iso(tileX,tileY,z=0){return{x:this.originX+(tileX-tileY)*(ISO_TW/2),y:this.originY+(tileX+tileY)*(ISO_TH/2)-z}}
+  _hmap(){let m=[];for(let r=0;r<this.ROWS;r++){m[r]=[];for(let c=0;c<this.COLS;c++)m[r][c]=this.rng()}return m}
+  _setupInput(cam){
     this.lastPinch=0;this.isDrag=false;this.dO={x:0,y:0,cx:0,cy:0};
     this.input.on('pointerdown',(ptr)=>{this.isDrag=false;this.dO={x:ptr.x,y:ptr.y,cx:cam.scrollX,cy:cam.scrollY}});
     this.input.on('pointermove',(ptr)=>{
@@ -685,17 +665,11 @@ class LandScene extends Phaser.Scene{
     });
     this.input.on('pointerup',(ptr)=>{
       this.lastPinch=0;
-      if(!this.isDrag&&G.placingBase){
-        G.placingBase=false;
-        document.getElementById('place-hint').style.display='none';
-        showBaseModal(G.activeLandSector);
-      }
+      if(!this.isDrag&&G.placingBase){G.placingBase=false;document.getElementById('place-hint').style.display='none';showBaseModal(G.activeLandSector)}
     });
     this.input.on('wheel',(p,o,dx,dy)=>{cam.zoom=Phaser.Math.Clamp(cam.zoom+(dy>0?-.12:.12),.32,3.5)});
-
     toast(`🌍 ${this.biome.name} · Sector ${this.sNum}`,'info');
   }
-
   _spawnResources(heights){
     this.biome.res.forEach(r=>{
       const m=RES_META[r]||{c:0x888888,sz:6};
@@ -716,9 +690,7 @@ class LandScene extends Phaser.Scene{
       }
     });
   }
-
   _spawnBases(heights){
-    // Enemy bases
     Object.values(G.baseLocations).filter(b=>b.sector===this.sNum).forEach((base,i)=>{
       const col=Math.floor(this.rng()*(this.COLS-10)+5);
       const row=Math.floor(this.rng()*(this.ROWS-10)+5);
@@ -727,28 +699,17 @@ class LandScene extends Phaser.Scene{
       const isThr=base.level>(G.playerData?.level||1);
       const col2=isThr?0xff4444:0xffdd00;
       const hex='#'+col2.toString(16).padStart(6,'0');
-      // Shadow
       this.add.ellipse(pos.x,by+35,90,28,0x000000,.4);
-      // Foundation
       this.add.rectangle(pos.x,by-8,105,75,col2,.16).setStrokeStyle(2,col2,.8);
-      // Keep
       this.add.rectangle(pos.x,by-55,55,70,col2,.28).setStrokeStyle(2,col2,.9);
-      // Battlements
       [-30,0,30].forEach(ox=>this.add.rectangle(pos.x+ox,by-94,14,12,col2,.5));
-      // Towers
       [-44,44].forEach(ox=>{this.add.rectangle(pos.x+ox,by-32,20,50,col2,.38).setStrokeStyle(1,col2,.7)});
       this.add.text(pos.x,by-115,base.base_name,{font:'bold 12px Courier New',color:hex}).setOrigin(.5);
       this.add.text(pos.x,by+48,`LV${base.level}`,{font:'10px Courier New',color:hex}).setOrigin(.5).setAlpha(.7);
       if(isThr){const w=this.add.text(pos.x,by-130,'⚠ THREAT',{font:'bold 10px Arial',color:'#ff4444'}).setOrigin(.5);this.tweens.add({targets:w,alpha:{from:.4,to:1},duration:700,repeat:-1,yoyo:true})}
     });
-
-    // Player's home/outpost
-    if(G.playerData?.sector===this.sNum||G.myBases['s'+this.sNum]){
-      const nm=G.myBases['s'+this.sNum]?.name||G.playerData?.base_name||'Your Base';
-      this._drawPlayerBase(nm);
-    }
+    if(G.playerData?.sector===this.sNum||G.myBases['s'+this.sNum]){const nm=G.myBases['s'+this.sNum]?.name||G.playerData?.base_name||'Your Base';this._drawPlayerBase(nm)}
   }
-
   _drawPlayerBase(nm){
     const col=Math.floor(this.COLS/2),row=Math.floor(this.ROWS/2);
     const pos=this._iso(col,row);
@@ -760,15 +721,12 @@ class LandScene extends Phaser.Scene{
     this.add.rectangle(pos.x,py-62,65,70,c,.22).setStrokeStyle(2,c,.9);
     [-32,32].forEach(ox=>{this.add.rectangle(pos.x+ox,py-38,20,50,c,.36).setStrokeStyle(1,c,.8)});
     [-15,0,15].forEach(ox=>this.add.rectangle(pos.x+ox,py-100,10,10,c,.55));
-    // Flag
     this.add.triangle(pos.x+2,py-105,0,0,22,8,0,18,c,.8);
     this.add.text(pos.x,py-120,'⭐ '+nm,{font:'bold 12px Courier New',color:hex}).setOrigin(.5);
     this.add.text(pos.x,py+58,'YOUR BASE',{font:'bold 10px Courier New',color:hex}).setOrigin(.5).setAlpha(.7);
     this.tweens.add({targets:ring,alpha:{from:.25,to:.85},duration:1800,repeat:-1,yoyo:true});
   }
-
   addPlayerBase(nm){this._drawPlayerBase(nm)}
-
   showMarch(count){
     const originX=this.originX,originY=this.originY;
     for(let i=0;i<Math.min((count/15)|0,12)+3;i++){
@@ -776,32 +734,24 @@ class LandScene extends Phaser.Scene{
       const dot=this.add.circle(sx,sy,5,0x44aaff,.9);
       const tx=originX+(this.COLS/2-this.ROWS/2)*(ISO_TW/2)+(this.rng()*100-50);
       const ty=originY+(this.COLS/2+this.ROWS/2)*(ISO_TH/2)+(this.rng()*60-30);
-      this.tweens.add({targets:dot,x:tx,y:ty,duration:2000+this.rng()*1200,ease:'Sine.easeInOut',
-        onComplete:()=>{this.tweens.add({targets:dot,alpha:0,duration:400,onComplete:()=>dot.destroy()})}});
+      this.tweens.add({targets:dot,x:tx,y:ty,duration:2000+this.rng()*1200,ease:'Sine.easeInOut',onComplete:()=>{this.tweens.add({targets:dot,alpha:0,duration:400,onComplete:()=>dot.destroy()})}});
     }
   }
-
   _spawnDecor(heights){
     const accent=this.biome.accent;
-    // Ambient floating particles
     for(let i=0;i<28;i++){
       const col=Math.floor(this.rng()*this.COLS),row=Math.floor(this.rng()*this.ROWS);
       const pos=this._iso(col,row);
       const pt=this.add.circle(pos.x,pos.y+ISO_TH/2,this.rng()*4+2,accent,.08+this.rng()*.07);
       this.tweens.add({targets:pt,alpha:{from:.04,to:.22},y:{value:'-='+((this.rng()*20+10)|0)},duration:2000+this.rng()*2200,repeat:-1,yoyo:true,delay:this.rng()*1500});
     }
-    // Sector watermark
     const cx=this.originX+(this.COLS/2-this.ROWS/2)*(ISO_TW/2);
     const cy=this.originY+(this.COLS/2+this.ROWS/2)*(ISO_TH/2);
     this.add.text(cx,cy,`${this.sNum}`,{font:'bold 260px Arial',color:'#'+accent.toString(16).padStart(6,'0')}).setOrigin(.5).setAlpha(.03);
-    // Fog patches at edges
     const fg=this.add.graphics();
     for(let i=0;i<10;i++){fg.fillStyle(this.biome.fog,.03);fg.fillEllipse(cx+(this.rng()-.5)*3000,cy+(this.rng()-.5)*2000,300+this.rng()*500,120+this.rng()*180)}
   }
-
-  update(){
-    document.getElementById('zoom-display').textContent=(this.cameras.main.zoom*100).toFixed(0)+'%';
-  }
+  update(){document.getElementById('zoom-display').textContent=(this.cameras.main.zoom*100).toFixed(0)+'%'}
 }
 
 // Boot Phaser
